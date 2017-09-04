@@ -13,6 +13,7 @@ When refreshing adverts make sure to only refresh what you need, e.g don't refre
 - Fill in the inspector values
 
 ## Scripting:
+### Logging Impressions
 ```c#
 IAS_Manager.OnImpression(string packageName);
 ```
@@ -26,6 +27,7 @@ This would log an impression on the current active square advert (id: 1) for the
 
 ---
 
+### Logging Clicks
 ```c#
 IAS_Manager.OnClick(string packageName);
 ```
@@ -39,6 +41,7 @@ This would log a click on the current active square advert (id: 1) for the first
 
 ---
 
+### Refreshing Adverts
 ```c#
 IAS_Manager.RefreshBanners(int jsonFileId, int wantedSlotInt, bool forceChangeActive = false);
 ```
@@ -52,6 +55,7 @@ This will refresh the square banner (id: 1) for the first json file (id: 0)
 
 ---
 
+### Checking Advert States
 ```c#
 IAS_Manager.IsAdReady(int jsonFileId, int wantedSlotInt);
 ```
@@ -65,6 +69,7 @@ This will check if the tall banner (id: 2) for the first json file (id: 0) is lo
 
 ---
 
+### Get Advert URL
 ```c#
 IAS_Manager.GetAdURL(int jsonFileId, int wantedSlotInt);
 ```
@@ -78,6 +83,7 @@ Opens the store URL of the active square banner (id: 1) for the first json file 
 
 ---
 
+### Get Advert Package Name
 ```c#
 IAS_Manager.GetAdPackage(int jsonFileId, int wantedSlotInt);
 ```
@@ -91,6 +97,7 @@ Returns the package name of the active tall banner (id: 2) for the first json fi
 
 ---
 
+### Get Advert Texture
 ```c#
 IAS_Manager.GetAdTexture(int jsonFileId, int wantedSlotInt);
 ```
