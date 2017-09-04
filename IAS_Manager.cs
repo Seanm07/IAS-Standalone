@@ -765,7 +765,7 @@ public class IAS_Manager : MonoBehaviour
 	public static void OnImpression(string packageName = "")
 	{
 		if(Instance.logAdImpressions){
-			GoogleAnalytics.Instance.LogEvent("IAS View", packageName);
+			GoogleAnalytics.Instance.IASLogEvent("IAS View", packageName);
 		}
 	}
 
@@ -776,7 +776,7 @@ public class IAS_Manager : MonoBehaviour
 	public static void OnClick(string packageName)
 	{
 		if(Instance.logAdClicks){
-			GoogleAnalytics.Instance.LogEvent("IAS Clicks", packageName);
+			GoogleAnalytics.Instance.IASLogEvent("IAS Clicks", packageName);
 		}
 	}
 
