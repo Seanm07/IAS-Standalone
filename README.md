@@ -124,7 +124,7 @@ private void OnAdReady()
 ```
 If the advert texture is ready then it sets adTexture as the texture of the loaded square banner (id: 1) from the first json file (id: 0)
 
-#### Scripting Callbacks
+## Scripting Callbacks
 ### Advert Image Finished Downloading
 ```c#
 IAS_Manager.OnIASImageDownloaded
