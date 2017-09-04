@@ -11,6 +11,8 @@ When refreshing adverts make sure to only refresh what you need, e.g don't refre
 - Import IAS_Manager.cs
 - Attach IAS_Manager.cs to a Game Object which will never be destroyed in the earliest scene possible (ads can start loading as soon as the script is active) make sure also never to create a duplicate of the script, you will be given an error if you do
 - Fill in the inspector values
+- Import whichever IAS Handler you need for your UI system (Currently we have Unity Canvas, NGUI and  GUITexture)
+- Attach the IAS Handler to a GameObject with either a UITexture, GUITexture or Canvas Image and set the Json File Id and Ad Type Id (See pre-notes which explains these)
 
 ## Scripting:
 ### Logging Impressions
