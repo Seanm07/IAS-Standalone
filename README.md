@@ -1,7 +1,7 @@
 # IAS Manager Documentation
 
 ## Pre-notes:
-The new IAS system now supports multiple json urls instead of a json file for the main and backscreen banners, generally you'll only be using 1 json file but in some cases multiple may be used. You interact with each json file using the order of assignment in the inspector for the jsonUrls array e.g the first json file is 0 then 1 then 2 etc.
+The new IAS script now supports multiple json urls instead of a json file for the main and backscreen banners, generally you'll only be using 1 json file but in some cases multiple may be used. You interact with each json file using the order of assignment in the inspector for the jsonUrls array e.g the first json file is 0 then 1 then 2 etc.
 
 wantedSlotInt variables refer to the advert type, so 1 is square, 2 is tall - this isn't an enum so we can possibly add more sizes in future if they're needed but really you'll only be referring to 1 and 2
 
