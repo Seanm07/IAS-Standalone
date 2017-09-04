@@ -13,6 +13,7 @@ When refreshing adverts make sure to only refresh what you need, e.g don't refre
 - Fill in the inspector values
 - Import whichever IAS Handler you need for your UI system (Currently we have Unity Canvas, NGUI and  GUITexture)
 - Attach the IAS Handler to a GameObject with either a UITexture, GUITexture or Canvas Image and set the Json File Id and Ad Type Id (See pre-notes which explains these)
+- If the ad is displayed on a screen where multiple ads will appear (such as the backscreens) then tick the Refresh After Place option to make each advert different
 
 ## Scripting:
 ### Logging Impressions
