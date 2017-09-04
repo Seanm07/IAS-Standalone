@@ -7,6 +7,7 @@ public class IAS_Handler : MonoBehaviour {
 	public int jsonFileId = 0;
 	[UnityEngine.Serialization.FormerlySerializedAs("bannerID")]
 	public int adTypeId = 1; // 1 = Square, 2 = Tall
+	public bool refreshAfterPlace = false; // Tick this for backscreen banners
 
 	private UITexture selfTexture;
 
@@ -70,6 +71,8 @@ public class IAS_Handler : MonoBehaviour {
 			isTextureAssigned = true;
 
 			IAS_Manager.OnImpression(activePackageName); // DO NOT REMOVE THIS LINE!
+			
+			if(refreshAfterPlace) IAS_Manager.RefreshBanners(jsonFileId, adTypeId);
 		}
 	}
 
