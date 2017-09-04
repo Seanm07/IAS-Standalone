@@ -319,7 +319,7 @@ public class IAS_Manager : MonoBehaviour
 			try {
 				return (List<AdJsonFileData>)binaryData.Deserialize(memoryStream);
 			} catch(SerializationException e){
-				GoogleAnalytics.Instance.IASLogError("Decod Fail! " + e.Message, false);
+				GoogleAnalytics.Instance.IASLogError("Decode Fail! " + e.Message, false);
 				throw;
 			}
 		} catch(FormatException e){
@@ -531,6 +531,7 @@ public class IAS_Manager : MonoBehaviour
 			#else
 				// Older version of Unity need the data manually mapped to the JsonFileData class
 				JsonFileData tempAdvertData = new JsonFileData();
+				tempAdvertData.slots = new List<JsonSlotData>();
 				JSONNode jsonData = JSON.Parse(wwwJSON.text);
 
 				for(int slotId=0;slotId < jsonData["slots"].AsArray.Count;slotId++)
@@ -540,7 +541,9 @@ public class IAS_Manager : MonoBehaviour
 
 					curSlotData.slotid = curSlot["slotid"];
 					curSlotData.updatetime = long.Parse(curSlot["updatetime"]);
-					curSlotData.active = curSlot["active"] == "true" ? true : false;
+
+					curSlotData.active = curSlot["active"].AsBool;
+
 					curSlotData.adurl = curSlot["adurl"];
 					curSlotData.imgurl = curSlot["imgurl"];
 
