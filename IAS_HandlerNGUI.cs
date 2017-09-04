@@ -5,7 +5,7 @@ using UnityEngine;
 public class IAS_Handler : MonoBehaviour {
 
 	public int jsonFileId = 0;
-	[FormerlySerializedAs("bannerID")]
+	[UnityEngine.Serialization.FormerlySerializedAs("bannerID")]
 	public int adTypeId = 1; // 1 = Square, 2 = Tall
 
 	private UITexture selfTexture;
@@ -69,14 +69,14 @@ public class IAS_Handler : MonoBehaviour {
 			selfTexture.mainTexture = adTexture;
 			isTextureAssigned = true;
 
-			IAS_Manager.OnImpression(activePackageName);
+			IAS_Manager.OnImpression(activePackageName); // DO NOT REMOVE THIS LINE!
 		}
 	}
 
 	void OnClick()
 	{
 		if(selfTexture != null && !string.IsNullOrEmpty(activeUrl)){
-			IAS_Manager.OnClick(activePackageName);
+			IAS_Manager.OnClick(activePackageName); // DO NOT REMOVE THIS LINE!
 
 			Application.OpenURL(activeUrl);
 		}
