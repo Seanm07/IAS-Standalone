@@ -735,7 +735,8 @@ public class IAS_Manager : MonoBehaviour
 			}
 		}
 
-		OnIASImageDownloaded();
+		if(OnIASImageDownloaded != null)
+			OnIASImageDownloaded.Invoke();
 	}
 
 	// Save the IAS data as the user quit the app (as saving whenever the data is updated is expensive)
@@ -789,8 +790,10 @@ public class IAS_Manager : MonoBehaviour
 	{
 		Instance.IncSlotChar(jsonFileId, wantedSlotInt);
 
-		if(forceChangeActive)
-			OnForceChangeWanted();
+		if(forceChangeActive){
+			if(OnForceChangeWanted != null)
+				OnForceChangeWanted.Invoke();
+		}
 	}
 
 	/// <summary>
