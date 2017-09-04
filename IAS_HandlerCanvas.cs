@@ -8,7 +8,7 @@ public class IAS_HandlerCanvas : MonoBehaviour
 	public int jsonFileId = 0;
 	[UnityEngine.Serialization.FormerlySerializedAs("bannerID")]
 	public int adTypeId = 1; // 1 = Square, 2 = Tall
-	public bool refreshAfterPlace = true;
+	public bool refreshAfterPlace = false; // Tick this for backscreen banners
 
 	private string activeUrl;
 	private string activePackageName;
