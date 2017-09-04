@@ -105,8 +105,74 @@ Returns the texture for the requested advert. Note: You should check IAS_Manager
 
 **Example usage:**
 ```c#
-if(IAS_Manager.IsAdReady(0, 1)){
-   Texture adTexture = IAS_Manager.GetAdTexture(0, 1);
+void OnEnable()
+{
+   IAS_Manager.OnIASImageDownloaded += OnAdReady;
+}
+
+void OnDisable()
+{
+   IAS_Manager.OnIASImageDownloaded -= OnAdReady;
+}
+
+private void OnAdReady()
+{
+   if(IAS_Manager.IsAdReady(0, 1)){
+      Texture adTexture = IAS_Manager.GetAdTexture(0, 1);
+   }
 }
 ```
 If the advert texture is ready then it sets adTexture as the texture of the loaded square banner (id: 1) from the first json file (id: 0)
+
+#### Scripting Callbacks
+### Advert Image Finished Downloading
+```c#
+IAS_Manager.OnIASImageDownloaded
+```
+Called each time an image has finished downloading, you should check the advert directly from this callback with IAS_Manager.IsAdReady(..) just to make sure the ad which finished downloaded in the one you expected to be downloaded
+
+**Example usage:**
+```c#
+void OnEnable()
+{
+   IAS_Manager.OnIASImageDownloaded += OnAdReady;
+}
+
+void OnDisable()
+{
+   IAS_Manager.OnIASImageDownloaded -= OnAdReady;
+}
+
+private void OnAdReady()
+{
+   if(IAS_Manager.IsAdReady(0, 1)){
+      // Set the texture here
+   }
+}
+```
+
+---
+
+### Advert Forced to Reload
+```c#
+IAS_Manager.OnForceChangeWanted
+```
+Called after a banner refresh is called with forceChangeActive set to true, this allows you to change IAS adverts without needing any special code, e.g you might want banners on a certain screen to change every x minutes or have a floating advert which is used across multiple screens which is force refreshed
+
+```c#
+void OnEnable()
+{
+   IAS_Manager.OnForceChangeWanted += OnForceChangeWanted;
+}
+
+void OnDisable()
+{
+   IAS_Manager.OnForceChangeWanted -= OnForceChangeWanted;
+}
+
+private void OnForceChangeWanted()
+{
+   // Code here to force reset the banner texture to be changed
+}
+```
+Make sure the advert texture is actually ready again before just applying a new texture, it's probably wise to wait for both OnIASImageDownloaded AND OnForceChangeWanted before changing the IAS texture for a forced ad change.
