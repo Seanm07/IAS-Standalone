@@ -216,7 +216,10 @@ public class IAS_Manager : MonoBehaviour
 				//Debug.Log("Filtered package list was empty!");
 			}
 
-			GoogleAnalytics.Instance.IASLogEvent("Total GamePickle games installed", installedApps.Count.ToString());
+			if (!PlayerPrefs.HasKey ("IASTotalGamesLogged")) {
+				GoogleAnalytics.Instance.IASLogEvent("Total GamePickle games installed", installedApps.Count.ToString());
+				PlayerPrefs.SetInt ("IASTotalGamesLogged", 1);
+			}
 		}
 	#endif
 
