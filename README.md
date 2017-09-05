@@ -5,7 +5,9 @@ The new IAS script now supports multiple json urls instead of a json file for th
 
 wantedSlotInt variables refer to the advert type, so 1 is square, 2 is tall - this isn't an enum so we can possibly add more sizes in future if they're needed but really you'll only be referring to 1 and 2
 
-When refreshing adverts make sure to only refresh what you need, e.g don't refresh square AND tall if only tall is going to be visible after the refresh call; the new system is built so ads aren't downloaded or loaded into memory when they don't need to be.
+When refreshing adverts make sure to only refresh what you need, e.g don't refresh square AND tall if only tall is going to be visible after the refresh call; the new system is built so ads aren't downloaded or loaded into memory when they don't need to be. 
+
+Note! If you're not using a certain size banner it's still best to blacklist them (see blacklisting step in setup section) because 1 ad of all sizes is still preloaded ready to be displayed AND restarting the app jumps ads to the next in queue so eventually all ads would be on the disk.
 
 ## Setup:
 - Import IAS_Manager.cs
@@ -14,6 +16,7 @@ When refreshing adverts make sure to only refresh what you need, e.g don't refre
 - Import whichever IAS Handler you need for your UI system (Currently we have Unity Canvas, NGUI and  GUITexture)
 - Attach the IAS Handler to a GameObject with either a UITexture, GUITexture or Canvas Image and set the Json File Id and Ad Type Id (See pre-notes which explains these)
 - If the ad is displayed on a screen where multiple ads will appear (such as the backscreens) then tick the Refresh After Place option to make each advert different
+- **Blacklisting slots** *Optional* If you don't need a certain image size then you can completely disable them by blacklisting their id via the IAS_Manager inspector under blacklisted slots, for example add a value of 2 to disable tall banners from loading
 
 ## Scripting:
 ### Logging Impressions
