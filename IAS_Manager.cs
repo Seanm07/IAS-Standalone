@@ -90,7 +90,7 @@ public class IAS_Manager : MonoBehaviour
 {
 	public static IAS_Manager Instance;
 
-	#if !UNITY_5 || !UNITY_ANDROID
+	#if (!UNITY_5 && !UNITY_2017) || !UNITY_ANDROID
 		public string bundleId = "com.example.GameNameHere";
 		public string appVersion = "1.00";
 	#else
@@ -115,10 +115,13 @@ public class IAS_Manager : MonoBehaviour
 	private List<string> installedApps = new List<string>();
 
 	public bool useStorageCache = true; // Should ads be downloaded to the device for use across sessions
+	public bool advancedLogging = false; // Enable this to debug the IAS with more debug logs
 
 	// Private to hide from developers as we never want to disable these
 	private bool logAdImpressions = true; // DO NOT DISABLE! This will affect our stats, instead talk to use about your issue
 	private bool logAdClicks = true; // DO NOT DISABLE! This will affect our stats, instead talk to use about your issue
+
+	public List<int> blacklistedSlots = new List<int>();
 
 	public static Action OnIASImageDownloaded;
 	public static Action OnForceChangeWanted;
@@ -189,7 +192,8 @@ public class IAS_Manager : MonoBehaviour
 	#if UNITY_ANDROID
 		private void UpdateInstalledPackages()
 		{
-			//Debug.Log("IAS Updating Installed Packages");
+			if(advancedLogging)
+				Debug.Log("IAS Updating Installed Packages");
 
 			installedApps.Clear();
 
@@ -210,10 +214,12 @@ public class IAS_Manager : MonoBehaviour
 						installedApps.Add(packageName.Trim().ToLowerInvariant());
 					}
 				} else {
-					// Debug.Log("No other installed packages found matching filter!");
+					if(advancedLogging)
+						Debug.Log("No other installed packages found matching filter!");
 				}
 			} else {
-				//Debug.Log("Filtered package list was empty!");
+				if(advancedLogging)
+					Debug.Log("Filtered package list was empty!");
 			}
 
 			if (!PlayerPrefs.HasKey ("IASTotalGamesLogged")) {
@@ -271,17 +277,17 @@ public class IAS_Manager : MonoBehaviour
 				RefreshBanners(jsonFileId, i);
 	}
 
-	private void RefreshActiveAdSlots(int jsonFileId)
+	private void RefreshActiveAdSlots(int jsonFileId, List<AdJsonFileData> customData = null)
 	{
-		for(int i=1;DoesSlotIntExist(jsonFileId, i);i++)
-			RefreshBanners(jsonFileId, i);
+		for(int i=1;DoesSlotIntExist(jsonFileId, i, customData);i++)
+			RefreshBanners(jsonFileId, i, false, customData);
 	}
 
-	private void RandomizeAdSlots(int jsonFileId)
+	private void RandomizeAdSlots(int jsonFileId, List<AdJsonFileData> customData = null)
 	{
 		for(int i=1;DoesSlotIntExist(jsonFileId, i);i++)
 		{
-			AdSlotData curSlotData = GetAdSlotData(jsonFileId, i);
+			AdSlotData curSlotData = GetAdSlotData(jsonFileId, i, customData);
 
 			curSlotData.lastSlotId = UnityEngine.Random.Range(0, curSlotData.advert.Count-1);
 		}
@@ -377,28 +383,28 @@ public class IAS_Manager : MonoBehaviour
 		return false;
 	}
 
-	private bool DoesSlotFileIdExist(int jsonFileId)
+	private bool DoesSlotFileIdExist(int jsonFileId, List<AdJsonFileData> customData = null)
 	{
-		return ((jsonFileId >= advertData.Count) ? false : true);
+		return ((jsonFileId >= (customData != null ? customData.Count : advertData.Count)) ? false : true);
 	}
 
-	private bool DoesSlotIntExist(int jsonFileId, int wantedSlotInt)
+	private bool DoesSlotIntExist(int jsonFileId, int wantedSlotInt, List<AdJsonFileData> customData = null)
 	{
-		return ((GetAdSlotData(jsonFileId, wantedSlotInt) == null) ? false : true);
+		return ((GetAdSlotData(jsonFileId, wantedSlotInt, customData) == null) ? false : true);
 	}
 
-	private bool DoesSlotCharExist(int jsonFileId, int wantedSlotInt, char wantedSlotChar)
+	private bool DoesSlotCharExist(int jsonFileId, int wantedSlotInt, char wantedSlotChar, List<AdJsonFileData> customData = null)
 	{
-		return ((GetAdData(jsonFileId, wantedSlotInt, wantedSlotChar) == null) ? false : true);
+		return ((GetAdData(jsonFileId, wantedSlotInt, wantedSlotChar, customData) == null) ? false : true);
 	}
 
-	private int GetSlotIndex(int jsonFileId, int wantedSlotInt)
+	private int GetSlotIndex(int jsonFileId, int wantedSlotInt, List<AdJsonFileData> customData = null)
 	{
-		if(DoesSlotFileIdExist(jsonFileId) && advertData[jsonFileId].slotInts != null){
+		if(DoesSlotFileIdExist(jsonFileId, customData) && (customData != null ? customData[jsonFileId].slotInts != null : advertData[jsonFileId].slotInts != null)){
 			// Iterate through each slot in the requested json file
-			for(int i=0;i < advertData[jsonFileId].slotInts.Count;i++)
+			for(int i=0;i < (customData != null ? customData[jsonFileId].slotInts.Count : advertData[jsonFileId].slotInts.Count);i++)
 			{
-				AdSlotData curSlotData = advertData[jsonFileId].slotInts[i];
+				AdSlotData curSlotData = (customData != null ? customData[jsonFileId].slotInts[i] : advertData[jsonFileId].slotInts[i]);
 
 				// Check if this ad slot int matched the one we requested
 				if(curSlotData.slotInt == wantedSlotInt)
@@ -409,9 +415,9 @@ public class IAS_Manager : MonoBehaviour
 		return -1;
 	}
 
-	private int GetAdIndex(int jsonFileId, int wantedSlotInt, char wantedSlotChar)
+	private int GetAdIndex(int jsonFileId, int wantedSlotInt, char wantedSlotChar, List<AdJsonFileData> customData = null)
 	{
-		AdSlotData slotData = GetAdSlotData(jsonFileId, wantedSlotInt);
+		AdSlotData slotData = GetAdSlotData(jsonFileId, wantedSlotInt, customData);
 
 		if(slotData.advert != null){
 			for(int i=0;i < slotData.advert.Count;i++)
@@ -426,11 +432,11 @@ public class IAS_Manager : MonoBehaviour
 		return -1;
 	}
 
-	private AdSlotData GetAdSlotData(int jsonFileId, int wantedSlotInt)
+	private AdSlotData GetAdSlotData(int jsonFileId, int wantedSlotInt, List<AdJsonFileData> customData = null)
 	{
-		if(DoesSlotFileIdExist(jsonFileId) && advertData[jsonFileId].slotInts != null){
+		if(DoesSlotFileIdExist(jsonFileId, customData) && (customData != null ? customData[jsonFileId].slotInts != null : advertData[jsonFileId].slotInts != null)){
 			// Iterate through each slot in the requested json file
-			foreach(AdSlotData curSlotData in advertData[jsonFileId].slotInts)
+			foreach(AdSlotData curSlotData in (customData != null ? customData[jsonFileId].slotInts : advertData[jsonFileId].slotInts))
 			{
 				// Check if this ad slot int matches the one we requested
 				if(curSlotData.slotInt == wantedSlotInt)
@@ -441,14 +447,14 @@ public class IAS_Manager : MonoBehaviour
 		return null;
 	}
 
-	private AdData GetAdData(int jsonFileId, int wantedSlotInt)
+	private AdData GetAdData(int jsonFileId, int wantedSlotInt, List<AdJsonFileData> customData = null)
 	{
-		return GetAdData(jsonFileId, wantedSlotInt, GetSlotChar(jsonFileId, wantedSlotInt));
+		return GetAdData(jsonFileId, wantedSlotInt, GetSlotChar(jsonFileId, wantedSlotInt, customData), customData);
 	}
 
-	private AdData GetAdData(int jsonFileId, int wantedSlotInt, char wantedSlotChar)
+	private AdData GetAdData(int jsonFileId, int wantedSlotInt, char wantedSlotChar, List<AdJsonFileData> customData = null)
 	{
-		AdSlotData curAdSlotData = GetAdSlotData(jsonFileId, wantedSlotInt);
+		AdSlotData curAdSlotData = GetAdSlotData(jsonFileId, wantedSlotInt, customData);
 
 		if(curAdSlotData != null){
 			foreach(AdData curData in curAdSlotData.advert)
@@ -462,9 +468,13 @@ public class IAS_Manager : MonoBehaviour
 		return null;
 	}
 
-	private void IncSlotChar(int jsonFileId, int wantedSlotInt)
+	private void IncSlotChar(int jsonFileId, int wantedSlotInt, List<AdJsonFileData> customData = null)
 	{
-		AdSlotData wantedSlotData = GetAdSlotData(jsonFileId, wantedSlotInt);
+		// Exit early if the wanted slot is blacklisted
+		foreach(int blacklistedSlot in blacklistedSlots)
+			if(wantedSlotInt == blacklistedSlot) return;
+		
+		AdSlotData wantedSlotData = GetAdSlotData(jsonFileId, wantedSlotInt, customData);
 
 		bool isValidAd = false;
 		AdData curAdData = null;
@@ -472,9 +482,10 @@ public class IAS_Manager : MonoBehaviour
 		int adSlotCount = wantedSlotData.advert.Count;
 
 		for(int i=0;!isValidAd && i < (adSlotCount*2);i++){
-			wantedSlotData.lastSlotId = wantedSlotData.lastSlotId + 1 >= adSlotCount ? 0 : wantedSlotData.lastSlotId + 1;
-
-			curAdData = GetAdData(jsonFileId, wantedSlotInt, GetSlotChar(jsonFileId, wantedSlotInt));
+			if(customData == null)
+				wantedSlotData.lastSlotId = wantedSlotData.lastSlotId + 1 >= adSlotCount ? 0 : wantedSlotData.lastSlotId + 1;
+			
+			curAdData = GetAdData(jsonFileId, wantedSlotInt, GetSlotChar(jsonFileId, wantedSlotInt, customData), customData);
 
 			// Never display any self ads or inactive ads
 			if(!curAdData.isSelf && curAdData.isActive){
@@ -485,184 +496,18 @@ public class IAS_Manager : MonoBehaviour
 			}
 		}
 
-		if(isValidAd)
-			StartCoroutine(DownloadAdTexture(curAdData));
-	}
+		if(isValidAd){
+			if(advancedLogging)
+				Debug.Log("Starting ad download of " + curAdData.packageName);
 
-	private char GetSlotChar(int jsonFileId, int wantedSlotInt)
-	{
-		AdSlotData curSlotData = GetAdSlotData(jsonFileId, wantedSlotInt);
-
-		if(curSlotData != null){
-			return (char)(curSlotData.lastSlotId + slotIdDecimalOffset);
-		} else {
-			return default(char);
+			StartCoroutine(DownloadAdTexture(jsonFileId, wantedSlotInt));
 		}
 	}
 
-	private IEnumerator DownloadIASData(bool cachedDataLoaded = false)
+	private IEnumerator DownloadAdTexture(int jsonFileId, int wantedSlotInt)
 	{
-		// Wait for an active internet connection
-		while(Application.internetReachability == NetworkReachability.NotReachable)
-			yield return null;
+		AdData curAdData = GetAdData(jsonFileId, wantedSlotInt, GetSlotChar(jsonFileId, wantedSlotInt));
 
-		//Debug.Log("IAS downloading data..");
-
-		// Iterate through each JSON file
-		for(int jsonFileId=0;jsonFileId < jsonUrls.Length;jsonFileId++)
-		{
-			// Download the JSON file
-			WWW wwwJSON = new WWW (jsonUrls[jsonFileId]);
-
-			// Wait for the JSON data to be downloaded
-			yield return wwwJSON;
-
-			// Check for any errors
-			if(!string.IsNullOrEmpty(wwwJSON.error)){
-				GoogleAnalytics.Instance.IASLogError("JSON download error! " + wwwJSON.error, false);
-				yield break;
-			} else if(wwwJSON.text.Contains("There was an error")){
-				GoogleAnalytics.Instance.IASLogError("JSON download error! Serverside system error!", false);
-				yield break;
-			} else if(string.IsNullOrEmpty(wwwJSON.text)){
-				GoogleAnalytics.Instance.IASLogError("JSON download error! Empty JSON!", false);
-				yield break;
-			}
-
-			#if UNITY_5 || UNITY_2017
-				JsonFileData tempAdvertData = JsonUtility.FromJson<JsonFileData>(wwwJSON.text);
-			#else
-				// Older version of Unity need the data manually mapped to the JsonFileData class
-				JsonFileData tempAdvertData = new JsonFileData();
-				tempAdvertData.slots = new List<JsonSlotData>();
-				JSONNode jsonData = JSON.Parse(wwwJSON.text);
-
-				for(int slotId=0;slotId < jsonData["slots"].AsArray.Count;slotId++)
-				{
-					JSONNode curSlot = jsonData["slots"].AsArray[slotId];
-					JsonSlotData curSlotData = new JsonSlotData();
-
-					curSlotData.slotid = curSlot["slotid"];
-					curSlotData.updatetime = long.Parse(curSlot["updatetime"]);
-
-					curSlotData.active = curSlot["active"].AsBool;
-
-					curSlotData.adurl = curSlot["adurl"];
-					curSlotData.imgurl = curSlot["imgurl"];
-
-					tempAdvertData.slots.Add(curSlotData);
-				}
-			#endif
-
-			// Dispose of the wwwJSON data (clear it from memory)
-			wwwJSON.Dispose();
-
-			if(tempAdvertData == null){
-				GoogleAnalytics.Instance.IASLogError("Temp advert data was null!", false);
-				yield break;
-			}
-
-			if(!DoesSlotFileIdExist(jsonFileId))
-				advertData.Add(new AdJsonFileData());
-
-			bool needToReloadAdSlots = !cachedDataLoaded;
-			bool needToRandomizeSlot = false;
-
-			// We're currently only using the slots, not containers
-			for(int i=0;i < tempAdvertData.slots.Count;i++)
-			{
-				JsonSlotData curSlot = tempAdvertData.slots[i];
-
-				// We'll be converting the slot id (e.g 1a, 1c or 2f) into just number and just character values
-				int slotInt; char slotChar;
-
-				// Attempt to extract the slot int from the slot id
-				if(!int.TryParse(Regex.Replace(curSlot.slotid, "[^0-9]", ""), out slotInt)){
-					GoogleAnalytics.Instance.IASLogError("Failed to parse slot int from '" + curSlot.slotid + "'");
-					yield break;
-				}
-
-				// Attempt to extract the slot character from the slot id
-				if(!char.TryParse(Regex.Replace(curSlot.slotid, "[^a-z]", ""), out slotChar)){
-					GoogleAnalytics.Instance.IASLogError("Failed to parse slot char from '" + curSlot.slotid + "'");
-					yield break;
-				}
-
-				// If this slot doesn't exist yet create a new slot for it
-				if(!DoesSlotIntExist(jsonFileId, slotInt))
-					advertData[jsonFileId].slotInts.Add(new AdSlotData(slotInt, new List<AdData>()));
-
-				// Get the index in the list for slotInt
-				int slotDataIndex = GetSlotIndex(jsonFileId, slotInt);
-
-				if(slotDataIndex < 0){
-					GoogleAnalytics.Instance.IASLogError("Failed to get slotDataIndex!");
-					yield break;
-				}
-
-				// Make sure this slot char isn't repeated in the json file within this slot int for some reason
-				if(!DoesSlotCharExist(jsonFileId, slotInt, slotChar)){
-					advertData[jsonFileId].slotInts[slotDataIndex].advert.Add(new AdData(slotChar));
-					needToRandomizeSlot = true;
-				}
-
-				int slotAdIndex = GetAdIndex(jsonFileId, slotInt, slotChar);
-
-				if(slotAdIndex < 0){
-					GoogleAnalytics.Instance.IASLogError("Failed to get slotAdIndex! Could not find " + slotInt + ", " + slotChar.ToString());
-					yield break;
-				}
-
-				AdData curAdData = advertData[jsonFileId].slotInts[slotDataIndex].advert[slotAdIndex];
-
-				// Extract the bundleId of the advert
-				#if UNITY_ANDROID
-					// Regex extracts the id GET request from the URL which is the package name of the game
-					// (replaces everything that does NOT match id=blahblah END or NOT match id=blahblah AMERPERSAND
-					string packageName = Regex.Match(curSlot.adurl, "(?<=id=)((?!(&|\\?)).)*").Value;
-				#elif UNITY_IOS
-					// IOS we just need to grab the name after the hash in the URL
-					string packageName = Regex.Match(curSlot.adurl, "(?<=.*#).*").Value;
-				#else
-					// For other platforms we should be fine to just use the full URL for package name comparisons as we'll be using .Compare
-					// And other platforms won't include any other referral bundle ids in their URLs
-					string packageName = curSlot.adurl;
-				#endif
-
-				string imageFileType = Regex.Match(curSlot.imgurl, "(?<=/uploads/adverts/.*)\\.[A-z]*[^(\\?|\")]").Value;
-
-				curAdData.fileName = curSlot.slotid + imageFileType;
-				curAdData.isSelf = packageName.Contains(bundleId);
-				curAdData.isActive = curSlot.active;
-				curAdData.isInstalled = IsPackageInstalled(packageName);
-				curAdData.adUrl = curSlot.adurl;
-				curAdData.packageName = packageName;
-
-				curAdData.imgUrl = curSlot.imgurl;
-
-				if(curAdData.newUpdateTime < curSlot.updatetime || curAdData.newUpdateTime == 0L)
-					needToReloadAdSlots = true;
-
-				curAdData.newUpdateTime = curSlot.updatetime;
-
-				// I'm not pre-downloading all the images here because it takes quite a long time to download even on our fast ethernet connection (~15 seconds)
-				// So I think it's best to download the images (if needed) when the ads are called to be refreshed
-			}
-
-			if(needToRandomizeSlot)
-				RandomizeAdSlots(jsonFileId);
-
-			if(needToReloadAdSlots)
-				RefreshActiveAdSlots(jsonFileId);
-		}
-
-		SaveIASData();
-
-		//Debug.Log("IAS Done");
-	}
-
-	private IEnumerator DownloadAdTexture(AdData curAdData)
-	{
 		// Download the texture for the newly selected IAS advert
 		// Only bother re-downloading the image if the timestamp has changed or the texture isn't marked as ready
 		if(!curAdData.isTextureReady || curAdData.lastUpdated < curAdData.newUpdateTime){
@@ -673,6 +518,9 @@ public class IAS_Manager : MonoBehaviour
 				string filePath = Application.persistentDataPath + Path.AltDirectorySeparatorChar; 
 
 				string fileName = "IAS_" + curAdData.fileName;
+
+				// Set this info before downloading
+				curAdData.lastUpdated = curAdData.newUpdateTime;
 
 				// Check to see if we have this advert locally cached
 				if(curAdData.isTextureFileCached){
@@ -692,11 +540,17 @@ public class IAS_Manager : MonoBehaviour
 						} catch(IOException e){
 							GoogleAnalytics.Instance.IASLogError("Failed to load cached file! " + e.Message);
 							curAdData.isTextureFileCached = false;
-							throw;
+
+							SaveIASData();
+
+							yield break;
 						}
 					} else {
 						GoogleAnalytics.Instance.IASLogError("Saved cached image was missing!");
 						curAdData.isTextureFileCached = false;
+
+						SaveIASData();
+
 						yield break;
 					}
 				} else {
@@ -705,6 +559,9 @@ public class IAS_Manager : MonoBehaviour
 
 					// Wait for the image data to be downloaded
 					yield return wwwImage;
+
+					// Need to re-grab curAdData just incase it has been overwritten
+					curAdData = GetAdData(jsonFileId, wantedSlotInt, GetSlotChar(jsonFileId, wantedSlotInt));
 
 					// Check for any errors
 					if(!string.IsNullOrEmpty(wwwImage.error)){
@@ -723,6 +580,8 @@ public class IAS_Manager : MonoBehaviour
 					try {
 						File.WriteAllBytes(filePath + fileName, wwwImage.bytes);
 						curAdData.isTextureFileCached = true;
+
+						SaveIASData();
 					} catch(IOException e){
 						GoogleAnalytics.Instance.IASLogError("Failed to create cache file! " + e.Message);
 						throw;
@@ -733,13 +592,274 @@ public class IAS_Manager : MonoBehaviour
 				}
 
 				curAdData.adTextureId = advertTextures.Count - 1;
-				curAdData.lastUpdated = curAdData.newUpdateTime;
 				curAdData.isTextureReady = true;
 			}
 		}
 
 		if(OnIASImageDownloaded != null)
 			OnIASImageDownloaded.Invoke();
+	}
+
+	private char GetSlotChar(int jsonFileId, int wantedSlotInt, List<AdJsonFileData> customData = null)
+	{
+		AdSlotData curSlotData = GetAdSlotData(jsonFileId, wantedSlotInt, customData);
+
+		if(curSlotData != null){
+			return (char)(curSlotData.lastSlotId + slotIdDecimalOffset);
+		} else {
+			return default(char);
+		}
+	}
+
+	private IEnumerator DownloadIASData(bool cachedDataLoaded = false)
+	{
+		// Wait for an active internet connection
+		if(Application.internetReachability == NetworkReachability.NotReachable)
+			yield return null;
+
+		if(advancedLogging)
+			Debug.Log("IAS downloading data..");
+
+		List<AdJsonFileData> newAdvertData = new List<AdJsonFileData>();
+
+		List<bool> needToDownloadAdSlot = new List<bool>();
+
+		// Iterate through each JSON file
+		for(int jsonFileId=0;jsonFileId < jsonUrls.Length;jsonFileId++)
+		{
+			needToDownloadAdSlot.Add(!cachedDataLoaded);
+
+			// Download the JSON file
+			WWW wwwJSON = new WWW (jsonUrls[jsonFileId]);
+
+			// Wait for the JSON data to be downloaded
+			yield return wwwJSON;
+
+			// Check for any errors
+			if(!string.IsNullOrEmpty(wwwJSON.error)){
+				GoogleAnalytics.Instance.IASLogError("JSON download error! " + wwwJSON.error, false);
+
+				if(advancedLogging)
+					Debug.LogError("JSON download error! " + wwwJSON.error);
+
+				yield break;
+			} else if(wwwJSON.text.Contains("There was an error")){
+				GoogleAnalytics.Instance.IASLogError("JSON download error! Serverside system error!", false);
+
+				if(advancedLogging)
+					Debug.LogError("JSON download error! Serverside system error!");
+
+				yield break;
+			} else if(string.IsNullOrEmpty(wwwJSON.text)){
+				GoogleAnalytics.Instance.IASLogError("JSON download error! Empty JSON!", false);
+
+				if(advancedLogging)
+					Debug.LogError("JSON download error! Empty JSON!");
+
+				yield break;
+			}
+
+			JsonFileData tempAdvertData = new JsonFileData();
+
+			try {
+				#if UNITY_5 || UNITY_2017
+					tempAdvertData = JsonUtility.FromJson<JsonFileData>(wwwJSON.text);
+				#else
+					// Older version of Unity need the data manually mapped to the JsonFileData class
+					tempAdvertData.slots = new List<JsonSlotData>();
+					JSONNode jsonData = JSON.Parse(wwwJSON.text);
+
+					for(int slotId=0;slotId < jsonData["slots"].AsArray.Count;slotId++)
+					{
+						JSONNode curSlot = jsonData["slots"].AsArray[slotId];
+						JsonSlotData curSlotData = new JsonSlotData();
+
+						curSlotData.slotid = curSlot["slotid"];
+						curSlotData.updatetime = long.Parse(curSlot["updatetime"]);
+
+						curSlotData.active = curSlot["active"].AsBool;
+
+						curSlotData.adurl = curSlot["adurl"];
+						curSlotData.imgurl = curSlot["imgurl"];
+
+						tempAdvertData.slots.Add(curSlotData);
+					}
+				#endif
+			} catch(ArgumentException e){
+				GoogleAnalytics.Instance.IASLogError("JSON data invalid!" + e.Message, false);
+
+				if(advancedLogging)
+					Debug.LogError("JSON data invalid!" + e.Message);
+
+				yield break;
+			}
+
+			// Dispose of the wwwJSON data (clear it from memory)
+			wwwJSON.Dispose();
+
+			if(tempAdvertData == null){
+				GoogleAnalytics.Instance.IASLogError("Temp advert data was null!", false);
+
+				if(advancedLogging)
+					Debug.LogError("Temp advert data was null!");
+
+				yield break;
+			}
+
+			if(tempAdvertData.slots.Count <= 0){
+				GoogleAnalytics.Instance.IASLogError("Temp advert data has no slots!", false);
+
+				if(advancedLogging)
+					Debug.LogError("Temp advert data has no slots!");
+
+				yield break;
+			}
+
+			if(!DoesSlotFileIdExist(jsonFileId, newAdvertData))
+				newAdvertData.Add(new AdJsonFileData());
+
+			bool needToRandomizeSlot = false;
+
+			// We're currently only using the slots, not containers
+			for(int i=0;i < tempAdvertData.slots.Count;i++)
+			{
+				try {
+					JsonSlotData curSlot = tempAdvertData.slots[i];
+
+					// We'll be converting the slot id (e.g 1a, 1c or 2f) into just number and just character values
+					int slotInt; char slotChar;
+
+					// Attempt to extract the slot int from the slot id
+					if(!int.TryParse(Regex.Replace(curSlot.slotid, "[^0-9]", ""), out slotInt)){
+						GoogleAnalytics.Instance.IASLogError("Failed to parse slot int from '" + curSlot.slotid + "'");
+
+						if(advancedLogging)
+							Debug.LogError("Failed to parse slot int from '" + curSlot.slotid + "'");
+
+						yield break;
+					}
+
+					// Attempt to extract the slot character from the slot id
+					if(!char.TryParse(Regex.Replace(curSlot.slotid, "[^a-z]", ""), out slotChar)){
+						GoogleAnalytics.Instance.IASLogError("Failed to parse slot char from '" + curSlot.slotid + "'");
+
+						if(advancedLogging)
+							Debug.LogError("Failed to parse slot char from '" + curSlot.slotid + "'");
+
+						yield break;
+					}
+
+					// If this slot doesn't exist yet create a new slot for it
+					if(!DoesSlotIntExist(jsonFileId, slotInt, newAdvertData))
+						newAdvertData[jsonFileId].slotInts.Add(new AdSlotData(slotInt, new List<AdData>()));
+
+					// Get the index in the list for slotInt
+					int slotDataIndex = GetSlotIndex(jsonFileId, slotInt, newAdvertData);
+
+					if(slotDataIndex < 0){
+						GoogleAnalytics.Instance.IASLogError("Failed to get slotDataIndex!");
+
+						if(advancedLogging)
+							Debug.LogError("Failed to get slotDataIndex!");
+
+						yield break;
+					}
+
+					// Make sure this slot char isn't repeated in the json file within this slot int for some reason
+					if(!DoesSlotCharExist(jsonFileId, slotInt, slotChar, newAdvertData)){
+						newAdvertData[jsonFileId].slotInts[slotDataIndex].advert.Add(new AdData(slotChar));
+					}
+
+					if(advertData.Count >= (jsonFileId + 1) && advertData[jsonFileId].slotInts.Count >= (slotDataIndex + 1)){
+						newAdvertData[jsonFileId].slotInts[slotDataIndex].lastSlotId = advertData[jsonFileId].slotInts[slotDataIndex].lastSlotId;
+					} else {
+						needToRandomizeSlot = true;
+					}
+
+					int slotAdIndex = GetAdIndex(jsonFileId, slotInt, slotChar, newAdvertData);
+
+					if(slotAdIndex < 0){
+						GoogleAnalytics.Instance.IASLogError("Failed to get slotAdIndex! Could not find " + slotInt + ", " + slotChar.ToString());
+
+						if(advancedLogging)
+							Debug.LogError("Failed to get slotAdIndex! Could not find " + slotInt + ", " + slotChar.ToString());
+
+						yield break;
+					}
+
+					AdData curAdData = newAdvertData[jsonFileId].slotInts[slotDataIndex].advert[slotAdIndex];
+
+					// Extract the bundleId of the advert
+					#if UNITY_ANDROID
+						// Regex extracts the id GET request from the URL which is the package name of the game
+						// (replaces everything that does NOT match id=blahblah END or NOT match id=blahblah AMERPERSAND
+						string packageName = Regex.Match(curSlot.adurl, "(?<=id=)((?!(&|\\?)).)*").Value;
+					#elif UNITY_IOS
+						// IOS we just need to grab the name after the hash in the URL
+						string packageName = Regex.Match(curSlot.adurl, "(?<=.*#).*").Value;
+					#else
+						// For other platforms we should be fine to just use the full URL for package name comparisons as we'll be using .Compare
+						// And other platforms won't include any other referral bundle ids in their URLs
+						string packageName = curSlot.adurl;
+					#endif
+
+					string imageFileType = Regex.Match(curSlot.imgurl, "(?<=/uploads/adverts/.*)\\.[A-z]*[^(\\?|\")]").Value;
+
+					curAdData.fileName = curSlot.slotid + imageFileType;
+					curAdData.isSelf = packageName.Contains(bundleId);
+					curAdData.isActive = curSlot.active;
+					curAdData.isInstalled = IsPackageInstalled(packageName);
+					curAdData.adUrl = curSlot.adurl;
+					curAdData.packageName = packageName;
+
+					curAdData.imgUrl = curSlot.imgurl;
+
+					// Check if the cached active data needs the ad textures reloading
+					if(advertData.Count >= (jsonFileId + 1) && advertData[jsonFileId].slotInts.Count >= (slotDataIndex + 1) && advertData[jsonFileId].slotInts[slotDataIndex].advert.Count >= (slotAdIndex + 1)){
+						AdData activeCachedAdData = advertData[jsonFileId].slotInts[slotDataIndex].advert[slotAdIndex];
+
+						if(activeCachedAdData.newUpdateTime < curSlot.updatetime || activeCachedAdData.newUpdateTime == 0L){
+							needToDownloadAdSlot[jsonFileId] = true;
+						} else {
+							curAdData.adTextureId = activeCachedAdData.adTextureId;
+							curAdData.isTextureReady = activeCachedAdData.isTextureReady;
+							curAdData.lastUpdated = activeCachedAdData.lastUpdated;
+							curAdData.isTextureFileCached = activeCachedAdData.isTextureFileCached;
+						}
+					} else {
+						needToDownloadAdSlot[jsonFileId] = true;
+					}
+
+					curAdData.newUpdateTime = curSlot.updatetime;
+
+					newAdvertData[jsonFileId].slotInts[slotDataIndex].advert[slotAdIndex] = curAdData;
+
+					// I'm not pre-downloading all the images here because it takes quite a long time to download even on our fast ethernet connection (~15 seconds)
+					// So I think it's best to download the images (if needed) when the ads are called to be refreshed
+				} catch(ArgumentNullException e){
+					if(advancedLogging)
+						Debug.LogError("Missing slot parameter! " + e.Message);
+
+					continue;
+				}
+			}
+
+			if(needToRandomizeSlot)
+				RandomizeAdSlots(jsonFileId, newAdvertData);
+		}
+
+		advertData = newAdvertData;
+
+		// Do this after updating the advertData so were working with live values
+		for(int jsonFileId=0;jsonFileId < jsonUrls.Length;jsonFileId++){
+			if(needToDownloadAdSlot[jsonFileId])
+				RefreshActiveAdSlots(jsonFileId);
+		}
+
+		SaveIASData();
+
+		if(advancedLogging)
+			Debug.Log("IAS Done");
 	}
 
 	// Save the IAS data as the user quit the app (as saving whenever the data is updated is expensive)
@@ -789,9 +909,20 @@ public class IAS_Manager : MonoBehaviour
 	/// </summary>
 	/// <param name="jsonFileId">JSON file ID</param>
 	/// <param name="wantedSlotInt">Slot int</param>
-	public static void RefreshBanners(int jsonFileId, int wantedSlotInt, bool forceChangeActive = false)
+	public static void RefreshBanners(int jsonFileId, int wantedSlotInt, bool forceChangeActive = false, List<AdJsonFileData> customData = null)
 	{
-		Instance.IncSlotChar(jsonFileId, wantedSlotInt);
+		if(!Instance.DoesSlotIntExist(jsonFileId, wantedSlotInt, customData)){
+			#if UNITY_EDITOR
+				Debug.LogError("(Editor Only) Attempted to refresh a blacklisted banner slot! (Slot " + wantedSlotInt + ") This will do nothing");
+			#endif
+
+			return;
+		}
+
+		if(Instance.advancedLogging)
+			Debug.Log("Refreshing banners for jsonFileId:" + jsonFileId + ", wantedSlotInt: " + wantedSlotInt + " has custom data? " + (customData != null ? "YES" : "NO"));
+
+		Instance.IncSlotChar(jsonFileId, wantedSlotInt, customData);
 
 		if(forceChangeActive){
 			if(OnForceChangeWanted != null)
