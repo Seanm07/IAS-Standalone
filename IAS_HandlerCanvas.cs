@@ -8,7 +8,7 @@ public class IAS_HandlerCanvas : MonoBehaviour
 	public int jsonFileId = 0;
 	[UnityEngine.Serialization.FormerlySerializedAs("bannerID")]
 	public int adTypeId = 1; // 1 = Square, 2 = Tall
-	public bool refreshAfterPlace = false; // Tick this for backscreen banners
+	public int adOffset = 0; // Used for backscreen ads (0, 1, 2)
 
 	private string activeUrl;
 	private string activePackageName;
@@ -69,17 +69,15 @@ public class IAS_HandlerCanvas : MonoBehaviour
 
 	private void SetupAdvert()
 	{
-		if(!isTextureAssigned && IAS_Manager.IsAdReady(jsonFileId, adTypeId)){
-			Texture2D adTexture = IAS_Manager.GetAdTexture(jsonFileId, adTypeId) as Texture2D;
-			activeUrl = IAS_Manager.GetAdURL(jsonFileId, adTypeId);
-			activePackageName = IAS_Manager.GetAdPackageName(jsonFileId, adTypeId);
+		if(!isTextureAssigned && IAS_Manager.IsAdReady(jsonFileId, adTypeId, adOffset)){
+			Texture2D adTexture = IAS_Manager.GetAdTexture(jsonFileId, adTypeId, adOffset) as Texture2D;
+			activeUrl = IAS_Manager.GetAdURL(jsonFileId, adTypeId, adOffset);
+			activePackageName = IAS_Manager.GetAdPackageName(jsonFileId, adTypeId, adOffset);
 
 			selfImage.sprite = Sprite.Create(adTexture, new Rect(0f, 0f, adTexture.width, adTexture.height), new Vector2(adTexture.width / 2f, adTexture.height / 2f));
 			isTextureAssigned = true;
 
 			IAS_Manager.OnImpression(activePackageName); // DO NOT REMOVE THIS LINE
-			
-			if(refreshAfterPlace) IAS_Manager.RefreshBanners(jsonFileId, adTypeId);
 		}
 	}
 
