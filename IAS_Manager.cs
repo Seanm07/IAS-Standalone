@@ -52,6 +52,7 @@ public class AdData {
 	public bool isInstalled; // Is this an advert for an app which is already installed?
 	public bool isSelf; // Is this an advert for this game?
 	public bool isActive; // Is this an advert marked as active in the json file?
+	public bool isDownloading;
 
 	public long lastUpdated; // Timestamp of when the ad was last updated
 	public long newUpdateTime; // Timestamp of the newly collected ad data
@@ -116,6 +117,8 @@ public class IAS_Manager : MonoBehaviour
 
 	public bool useStorageCache = true; // Should ads be downloaded to the device for use across sessions
 	public bool advancedLogging = false; // Enable this to debug the IAS with more debug logs
+
+	public int maxAdsToPreload = 3; // This will keep x ads after the active ad preloaded (useful for backscreen preloading with a value of 3)
 
 	// Private to hide from developers as we never want to disable these
 	private bool logAdImpressions = true; // DO NOT DISABLE! This will affect our stats, instead talk to use about your issue
@@ -449,7 +452,7 @@ public class IAS_Manager : MonoBehaviour
 
 	private AdData GetAdData(int jsonFileId, int wantedSlotInt, List<AdJsonFileData> customData = null)
 	{
-		return GetAdData(jsonFileId, wantedSlotInt, GetSlotChar(jsonFileId, wantedSlotInt, customData), customData);
+		return GetAdData(jsonFileId, wantedSlotInt, GetSlotChar(jsonFileId, wantedSlotInt, 0, customData), customData);
 	}
 
 	private AdData GetAdData(int jsonFileId, int wantedSlotInt, char wantedSlotChar, List<AdJsonFileData> customData = null)
@@ -485,7 +488,7 @@ public class IAS_Manager : MonoBehaviour
 			if(customData == null)
 				wantedSlotData.lastSlotId = wantedSlotData.lastSlotId + 1 >= adSlotCount ? 0 : wantedSlotData.lastSlotId + 1;
 			
-			curAdData = GetAdData(jsonFileId, wantedSlotInt, GetSlotChar(jsonFileId, wantedSlotInt, customData), customData);
+			curAdData = GetAdData(jsonFileId, wantedSlotInt, GetSlotChar(jsonFileId, wantedSlotInt, 0, customData), customData);
 
 			// Never display any self ads or inactive ads
 			if(!curAdData.isSelf && curAdData.isActive){
@@ -497,115 +500,125 @@ public class IAS_Manager : MonoBehaviour
 		}
 
 		if(isValidAd){
-			if(advancedLogging)
-				Debug.Log("Starting ad download of " + curAdData.packageName);
-
 			StartCoroutine(DownloadAdTexture(jsonFileId, wantedSlotInt));
 		}
 	}
 
 	private IEnumerator DownloadAdTexture(int jsonFileId, int wantedSlotInt)
 	{
-		AdData curAdData = GetAdData(jsonFileId, wantedSlotInt, GetSlotChar(jsonFileId, wantedSlotInt));
+		for(int i=0;i < maxAdsToPreload+1;i++)
+		{
+			AdData curAdData = GetAdData(jsonFileId, wantedSlotInt, GetSlotChar(jsonFileId, wantedSlotInt, i));
 
-		// Download the texture for the newly selected IAS advert
-		// Only bother re-downloading the image if the timestamp has changed or the texture isn't marked as ready
-		if(!curAdData.isTextureReady || curAdData.lastUpdated < curAdData.newUpdateTime){
-			// Check if this is an advert we may be using in this game
-			// Note: We still download installed ads because we might need them if there's no ads to display
-			if(!curAdData.isSelf && curAdData.isActive){
-				// Whilst we still have wwwImage write the bytes to disk to save on needing extra operations
-				string filePath = Application.persistentDataPath + Path.AltDirectorySeparatorChar; 
+			if(curAdData != null && !curAdData.isDownloading){
+				if(advancedLogging)
+					Debug.Log("Starting ad download of " + curAdData.packageName);
 
-				string fileName = "IAS_" + curAdData.fileName;
+				// Download the texture for the newly selected IAS advert
+				// Only bother re-downloading the image if the timestamp has changed or the texture isn't marked as ready
+				if(!curAdData.isTextureReady || curAdData.lastUpdated < curAdData.newUpdateTime){
+					// Check if this is an advert we may be using in this game
+					// Note: We still download installed ads because we might need them if there's no ads to display
+					if(!curAdData.isSelf && curAdData.isActive){
+						// Whilst we still have wwwImage write the bytes to disk to save on needing extra operations
+						string filePath = Application.persistentDataPath + Path.AltDirectorySeparatorChar; 
 
-				// Set this info before downloading
-				curAdData.lastUpdated = curAdData.newUpdateTime;
+						string fileName = "IAS_" + curAdData.fileName;
 
-				// Check to see if we have this advert locally cached
-				if(curAdData.isTextureFileCached){
-					// Make sure the cache file actually exists (unexpected write fails or manual deletion)
-					if(File.Exists(filePath + fileName)){
-						try {
-							// Read the saved texture from disk
-							byte[] imageData = File.ReadAllBytes(filePath + fileName);
+						// Set this info before downloading
+						curAdData.lastUpdated = curAdData.newUpdateTime;
+						curAdData.isDownloading = true;
 
-							// We need to create a template texture, we're also setting the compression type here
-							Texture2D imageTexture = new Texture2D(2, 2, TextureFormat.ETC2_RGBA1, false);
+						// Check to see if we have this advert locally cached
+						if(curAdData.isTextureFileCached){
+							// Make sure the cache file actually exists (unexpected write fails or manual deletion)
+							if(File.Exists(filePath + fileName)){
+								try {
+									// Read the saved texture from disk
+									byte[] imageData = File.ReadAllBytes(filePath + fileName);
 
-							// Load the image data, this will also resize the texture
-							imageTexture.LoadImage(imageData);
+									// We need to create a template texture, we're also setting the compression type here
+									Texture2D imageTexture = new Texture2D(2, 2, TextureFormat.ETC2_RGBA1, false);
 
-							advertTextures.Add(imageTexture);
-						} catch(IOException e){
-							GoogleAnalytics.Instance.IASLogError("Failed to load cached file! " + e.Message);
-							curAdData.isTextureFileCached = false;
+									// Load the image data, this will also resize the texture
+									imageTexture.LoadImage(imageData);
 
-							SaveIASData();
+									advertTextures.Add(imageTexture);
+								} catch(IOException e){
+									GoogleAnalytics.Instance.IASLogError("Failed to load cached file! " + e.Message);
+									curAdData.isTextureFileCached = false;
 
-							yield break;
+									SaveIASData();
+
+									yield break;
+								}
+							} else {
+								GoogleAnalytics.Instance.IASLogError("Saved cached image was missing!");
+								curAdData.isTextureFileCached = false;
+
+								SaveIASData();
+
+								yield break;
+							}
+						} else {
+							// The advert is not yet locally cached, 
+							WWW wwwImage = new WWW(curAdData.imgUrl);
+
+							// Wait for the image data to be downloaded
+							yield return wwwImage;
+
+							// Need to re-grab curAdData just incase it has been overwritten
+							curAdData = GetAdData(jsonFileId, wantedSlotInt, GetSlotChar(jsonFileId, wantedSlotInt, i));
+
+							// Check for any errors
+							if(!string.IsNullOrEmpty(wwwImage.error)){
+								GoogleAnalytics.Instance.IASLogError("Image download error! " + wwwImage.error);
+								yield break;
+							} else if(wwwImage.text.Contains("There was an error")){
+								GoogleAnalytics.Instance.IASLogError("Image download error! Serverside system error!");
+								yield break;
+							} else if(string.IsNullOrEmpty(wwwImage.text)){
+								GoogleAnalytics.Instance.IASLogError("Image download error! Empty result!");
+								yield break;
+							}
+
+							advertTextures.Add(wwwImage.texture);
+
+							try {
+								File.WriteAllBytes(filePath + fileName, wwwImage.bytes);
+								curAdData.isTextureFileCached = true;
+
+								SaveIASData();
+							} catch(IOException e){
+								GoogleAnalytics.Instance.IASLogError("Failed to create cache file! " + e.Message);
+								throw;
+							}
+
+							// Dispose of the wwwImage data as soon as we no longer need it (clear it from memory)
+							wwwImage.Dispose();
 						}
-					} else {
-						GoogleAnalytics.Instance.IASLogError("Saved cached image was missing!");
-						curAdData.isTextureFileCached = false;
 
-						SaveIASData();
-
-						yield break;
+						curAdData.adTextureId = advertTextures.Count - 1;
+						curAdData.isTextureReady = true;
+						curAdData.isDownloading = false;
 					}
-				} else {
-					// The advert is not yet locally cached, 
-					WWW wwwImage = new WWW(curAdData.imgUrl);
-
-					// Wait for the image data to be downloaded
-					yield return wwwImage;
-
-					// Need to re-grab curAdData just incase it has been overwritten
-					curAdData = GetAdData(jsonFileId, wantedSlotInt, GetSlotChar(jsonFileId, wantedSlotInt));
-
-					// Check for any errors
-					if(!string.IsNullOrEmpty(wwwImage.error)){
-						GoogleAnalytics.Instance.IASLogError("Image download error! " + wwwImage.error);
-						yield break;
-					} else if(wwwImage.text.Contains("There was an error")){
-						GoogleAnalytics.Instance.IASLogError("Image download error! Serverside system error!");
-						yield break;
-					} else if(string.IsNullOrEmpty(wwwImage.text)){
-						GoogleAnalytics.Instance.IASLogError("Image download error! Empty result!");
-						yield break;
-					}
-
-					advertTextures.Add(wwwImage.texture);
-
-					try {
-						File.WriteAllBytes(filePath + fileName, wwwImage.bytes);
-						curAdData.isTextureFileCached = true;
-
-						SaveIASData();
-					} catch(IOException e){
-						GoogleAnalytics.Instance.IASLogError("Failed to create cache file! " + e.Message);
-						throw;
-					}
-
-					// Dispose of the wwwImage data as soon as we no longer need it (clear it from memory)
-					wwwImage.Dispose();
 				}
 
-				curAdData.adTextureId = advertTextures.Count - 1;
-				curAdData.isTextureReady = true;
+				if(advancedLogging)
+					Debug.Log("Finished ad download of " + curAdData.packageName);
+
+				if(OnIASImageDownloaded != null)
+					OnIASImageDownloaded.Invoke();
 			}
 		}
-
-		if(OnIASImageDownloaded != null)
-			OnIASImageDownloaded.Invoke();
 	}
 
-	private char GetSlotChar(int jsonFileId, int wantedSlotInt, List<AdJsonFileData> customData = null)
+	private char GetSlotChar(int jsonFileId, int wantedSlotInt, int offset = 0, List<AdJsonFileData> customData = null)
 	{
 		AdSlotData curSlotData = GetAdSlotData(jsonFileId, wantedSlotInt, customData);
 
 		if(curSlotData != null){
-			return (char)(curSlotData.lastSlotId + slotIdDecimalOffset);
+			return (char)(curSlotData.lastSlotId + slotIdDecimalOffset + offset);
 		} else {
 			return default(char);
 		}
@@ -825,6 +838,7 @@ public class IAS_Manager : MonoBehaviour
 							curAdData.isTextureReady = activeCachedAdData.isTextureReady;
 							curAdData.lastUpdated = activeCachedAdData.lastUpdated;
 							curAdData.isTextureFileCached = activeCachedAdData.isTextureFileCached;
+							curAdData.isDownloading = activeCachedAdData.isDownloading;
 						}
 					} else {
 						needToDownloadAdSlot[jsonFileId] = true;
