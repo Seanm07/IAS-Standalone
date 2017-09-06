@@ -272,6 +272,16 @@ public class IAS_Manager : MonoBehaviour
 			RefreshActiveAdSlots();
 	}
 
+	#if UNITY_EDITOR
+		void Update()
+		{
+			if(Input.GetKeyDown(KeyCode.R)){
+				IAS_Manager.RefreshBanners(0, 1, true);
+				IAS_Manager.RefreshBanners(0, 2, true);
+			}
+		}
+	#endif
+
 	private void RefreshActiveAdSlots()
 	{
 		// Refresh an ad for each slot int so they all have an active ad loaded and ready to be displayed
@@ -296,14 +306,86 @@ public class IAS_Manager : MonoBehaviour
 		}
 	}
 
+	// Used when we need to modify the values of AdJsonFileData temporarily without changing source values
+	private List<AdJsonFileData> DeepCopyAsJsonFileData(List<AdJsonFileData> input)
+	{
+		List<AdJsonFileData> output = new List<AdJsonFileData>();
+
+		for(int jsonFileId=0;jsonFileId < input.Count;jsonFileId++)
+		{
+			AdJsonFileData curInputJsonFile = input[jsonFileId];
+
+			output.Add(new AdJsonFileData());
+
+			AdJsonFileData curOutputJsonFile = output[jsonFileId];
+
+			// Slot IDs determine ad sizes and are the numbers in the slots 1a, 1b, 2a etc
+			for(int slotId=0;slotId < curInputJsonFile.slotInts.Count;slotId++)
+			{
+				AdSlotData curInputSlot = curInputJsonFile.slotInts[slotId];
+
+				curOutputJsonFile.slotInts.Add(new AdSlotData());
+
+				AdSlotData curOutputSlot = curOutputJsonFile.slotInts[slotId];
+
+				curOutputSlot.slotInt = curInputSlot.slotInt;
+				curOutputSlot.lastSlotId = curInputSlot.lastSlotId;
+
+				// Ad IDs determine the ads within the slots of sizes, they're the characters in the slots 1a, 1b, 1a etc
+				for(int adId=0;adId < curInputSlot.advert.Count;adId++)
+				{
+					AdData curInputAdvert = curInputSlot.advert[adId];
+
+					curOutputSlot.advert.Add(new AdData());
+
+					AdData curOutputAdvert = curOutputSlot.advert[adId];
+
+					curOutputAdvert.slotChar = curInputAdvert.slotChar;
+					curOutputAdvert.fileName = curInputAdvert.fileName;
+					curOutputAdvert.isTextureFileCached = curInputAdvert.isTextureFileCached;
+					curOutputAdvert.isTextureReady = curInputAdvert.isTextureReady;
+					curOutputAdvert.isInstalled = curInputAdvert.isInstalled;
+					curOutputAdvert.isSelf = curInputAdvert.isSelf;
+					curOutputAdvert.isActive = curInputAdvert.isActive;
+					curOutputAdvert.isDownloading = curInputAdvert.isDownloading;
+					curOutputAdvert.lastUpdated = curInputAdvert.lastUpdated;
+					curOutputAdvert.newUpdateTime = curInputAdvert.newUpdateTime;
+					curOutputAdvert.imgUrl = curInputAdvert.imgUrl;
+					curOutputAdvert.adUrl = curInputAdvert.adUrl;
+					curOutputAdvert.packageName = curInputAdvert.packageName;
+					curOutputAdvert.adTextureId = curInputAdvert.adTextureId;
+				}
+			}
+		}
+
+		return output;
+	}
+
 	private string EncodeIASData()
 	{
 		try {
+			List<AdJsonFileData> saveReadyAdvertData = DeepCopyAsJsonFileData(advertData);
+
+			// Some parts of the data needs their values changing as they won't be valid for future sessions
+			foreach(AdJsonFileData curFileData in saveReadyAdvertData)
+			{
+				foreach(AdSlotData curSlotData in curFileData.slotInts)
+				{
+					foreach(AdData curData in curSlotData.advert)
+					{
+						curData.adTextureId = -1;
+						curData.isTextureReady = false;
+						curData.isDownloading = false;
+						curData.lastUpdated = 0L;
+					}
+				}
+			}
+
 			BinaryFormatter binaryData = new BinaryFormatter();
 			MemoryStream memoryStream = new MemoryStream();
 
 			// Serialize our data list into the memory stream
-			binaryData.Serialize(memoryStream, (object)advertData);
+			binaryData.Serialize(memoryStream, (object)saveReadyAdvertData);
 
 			string base64Data = string.Empty;
 
@@ -356,19 +438,6 @@ public class IAS_Manager : MonoBehaviour
 
 		if(!string.IsNullOrEmpty(loadedIASData)){
 			advertData = DecodeIASData(loadedIASData);
-
-			// Some parts of the data needs their values changing as they're no longer valid for this session
-			foreach(AdJsonFileData curFileData in advertData)
-			{
-				foreach(AdSlotData curSlotData in curFileData.slotInts)
-				{
-					foreach(AdData curData in curSlotData.advert)
-					{
-						curData.adTextureId = -1;
-						curData.isTextureReady = false;
-					}
-				}
-			}
 
 			if(advertData != null)
 				return true;
@@ -450,9 +519,9 @@ public class IAS_Manager : MonoBehaviour
 		return null;
 	}
 
-	private AdData GetAdData(int jsonFileId, int wantedSlotInt, List<AdJsonFileData> customData = null)
+	private AdData GetAdData(int jsonFileId, int wantedSlotInt, int offset, List<AdJsonFileData> customData = null)
 	{
-		return GetAdData(jsonFileId, wantedSlotInt, GetSlotChar(jsonFileId, wantedSlotInt, 0, customData), customData);
+		return GetAdData(jsonFileId, wantedSlotInt, GetSlotChar(jsonFileId, wantedSlotInt, offset, customData), customData);
 	}
 
 	private AdData GetAdData(int jsonFileId, int wantedSlotInt, char wantedSlotChar, List<AdJsonFileData> customData = null)
@@ -508,12 +577,10 @@ public class IAS_Manager : MonoBehaviour
 	{
 		for(int i=0;i < maxAdsToPreload+1;i++)
 		{
-			AdData curAdData = GetAdData(jsonFileId, wantedSlotInt, GetSlotChar(jsonFileId, wantedSlotInt, i));
+			char slotChar =  GetSlotChar(jsonFileId, wantedSlotInt, i);
+			AdData curAdData = GetAdData(jsonFileId, wantedSlotInt, slotChar);
 
 			if(curAdData != null && !curAdData.isDownloading){
-				if(advancedLogging)
-					Debug.Log("Starting ad download of " + curAdData.packageName);
-
 				// Download the texture for the newly selected IAS advert
 				// Only bother re-downloading the image if the timestamp has changed or the texture isn't marked as ready
 				if(!curAdData.isTextureReady || curAdData.lastUpdated < curAdData.newUpdateTime){
@@ -531,6 +598,9 @@ public class IAS_Manager : MonoBehaviour
 
 						// Check to see if we have this advert locally cached
 						if(curAdData.isTextureFileCached){
+							//if(advancedLogging)
+							//	Debug.Log("Starting ad download of " + curAdData.packageName + " " + wantedSlotInt + "" + slotChar + " (CACHED)");
+
 							// Make sure the cache file actually exists (unexpected write fails or manual deletion)
 							if(File.Exists(filePath + fileName)){
 								try {
@@ -561,6 +631,9 @@ public class IAS_Manager : MonoBehaviour
 								yield break;
 							}
 						} else {
+							//if(advancedLogging)
+							//	Debug.Log("Starting ad download of " + curAdData.packageName + " " + wantedSlotInt + "" + slotChar + " (NOT CACHED)");
+
 							// The advert is not yet locally cached, 
 							WWW wwwImage = new WWW(curAdData.imgUrl);
 
@@ -568,7 +641,7 @@ public class IAS_Manager : MonoBehaviour
 							yield return wwwImage;
 
 							// Need to re-grab curAdData just incase it has been overwritten
-							curAdData = GetAdData(jsonFileId, wantedSlotInt, GetSlotChar(jsonFileId, wantedSlotInt, i));
+							curAdData = GetAdData(jsonFileId, wantedSlotInt, slotChar);
 
 							// Check for any errors
 							if(!string.IsNullOrEmpty(wwwImage.error)){
@@ -604,8 +677,8 @@ public class IAS_Manager : MonoBehaviour
 					}
 				}
 
-				if(advancedLogging)
-					Debug.Log("Finished ad download of " + curAdData.packageName);
+				//if(advancedLogging)
+				//	Debug.Log("Finished ad download of " + curAdData.packageName);
 
 				if(OnIASImageDownloaded != null)
 					OnIASImageDownloaded.Invoke();
@@ -618,7 +691,40 @@ public class IAS_Manager : MonoBehaviour
 		AdSlotData curSlotData = GetAdSlotData(jsonFileId, wantedSlotInt, customData);
 
 		if(curSlotData != null){
-			return (char)(curSlotData.lastSlotId + slotIdDecimalOffset + offset);
+			int finalOffset = 0;
+
+			if(customData == null){
+				// Make sure all ads within maxAdsToPreload are unique, otherwise fallback to showing ads already installed then fallback to allowing duplicates
+				List<string> preloadPackageNames = new List<string>();
+
+				for(int i=0;i <= offset;)
+				{
+					// Manual modulo to support negative numbers
+					int slotCharIdCheck = Mathf.Abs(curSlotData.lastSlotId + i + finalOffset) % curSlotData.advert.Count;
+					char slotCharCheck = (char)(slotCharIdCheck + slotIdDecimalOffset);
+
+					AdData curAd = GetAdData(jsonFileId, wantedSlotInt, slotCharCheck);
+
+					bool packageNameCollision = false;
+
+					foreach(string package in preloadPackageNames){
+						if((finalOffset <= (curSlotData.advert.Count * 2) && curAd.packageName == package) || curAd.isSelf || !curAd.isActive || (finalOffset <= curSlotData.advert.Count && curAd.isInstalled)){
+							finalOffset++;
+							packageNameCollision = true;
+						}
+					}
+
+					if(!packageNameCollision){
+						preloadPackageNames.Add(curAd.packageName);
+						i++;
+					}
+				}
+			}
+
+			int wantedSlotCharId = (curSlotData.lastSlotId + finalOffset + offset) % curSlotData.advert.Count;
+			char wantedSlotChar = (char)(wantedSlotCharId + slotIdDecimalOffset);
+
+			return wantedSlotChar;
 		} else {
 			return default(char);
 		}
@@ -862,7 +968,7 @@ public class IAS_Manager : MonoBehaviour
 				RandomizeAdSlots(jsonFileId, newAdvertData);
 		}
 
-		advertData = newAdvertData;
+		advertData = DeepCopyAsJsonFileData(newAdvertData);
 
 		// Do this after updating the advertData so were working with live values
 		for(int jsonFileId=0;jsonFileId < jsonUrls.Length;jsonFileId++){
@@ -950,9 +1056,9 @@ public class IAS_Manager : MonoBehaviour
 	/// <returns><c>true</c> if is ad ready the specified jsonFileId wantedSlotInt; otherwise, <c>false</c>.</returns>
 	/// <param name="jsonFileId">JSON file ID</param>
 	/// <param name="wantedSlotInt">Slot int</param>
-	public static bool IsAdReady(int jsonFileId, int wantedSlotInt)
+	public static bool IsAdReady(int jsonFileId, int wantedSlotInt, int offset = 0)
 	{
-		AdData returnValue = Instance.GetAdData(jsonFileId, wantedSlotInt);
+		AdData returnValue = Instance.GetAdData(jsonFileId, wantedSlotInt, offset);
 
 		if(returnValue != null){
 			return returnValue.isTextureReady;
@@ -967,9 +1073,9 @@ public class IAS_Manager : MonoBehaviour
 	/// <returns>The advert URL</returns>
 	/// <param name="jsonFileId">JSON file ID</param>
 	/// <param name="wantedSlotInt">Slot int</param>
-	public static string GetAdURL(int jsonFileId, int wantedSlotInt)
+	public static string GetAdURL(int jsonFileId, int wantedSlotInt, int offset = 0)
 	{
-		AdData returnValue = Instance.GetAdData(jsonFileId, wantedSlotInt);
+		AdData returnValue = Instance.GetAdData(jsonFileId, wantedSlotInt, offset);
 
 		if(returnValue != null){
 			return returnValue.adUrl;
@@ -984,9 +1090,9 @@ public class IAS_Manager : MonoBehaviour
 	/// <returns>The advert package name</returns>
 	/// <param name="jsonFileId">JSON file ID</param>
 	/// <param name="wantedSlotInt">Slot int</param>
-	public static string GetAdPackageName(int jsonFileId, int wantedSlotInt)
+	public static string GetAdPackageName(int jsonFileId, int wantedSlotInt, int offset = 0)
 	{
-		AdData returnValue = Instance.GetAdData(jsonFileId, wantedSlotInt);
+		AdData returnValue = Instance.GetAdData(jsonFileId, wantedSlotInt, offset);
 
 		if(returnValue != null){
 			return returnValue.packageName;
@@ -1001,9 +1107,9 @@ public class IAS_Manager : MonoBehaviour
 	/// <returns>The advert texture</returns>
 	/// <param name="jsonFileId">JSON file ID</param>
 	/// <param name="wantedSlotInt">Slot int</param>
-	public static Texture GetAdTexture(int jsonFileId, int wantedSlotInt)
+	public static Texture GetAdTexture(int jsonFileId, int wantedSlotInt, int offset = 0)
 	{
-		AdData returnValue = Instance.GetAdData(jsonFileId, wantedSlotInt);
+		AdData returnValue = Instance.GetAdData(jsonFileId, wantedSlotInt, offset);
 
 		if(returnValue != null){
 			return Instance.advertTextures[returnValue.adTextureId];
