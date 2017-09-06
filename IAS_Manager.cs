@@ -521,7 +521,7 @@ public class IAS_Manager : MonoBehaviour
 
 	private AdData GetAdData(int jsonFileId, int wantedSlotInt, int offset, List<AdJsonFileData> customData = null)
 	{
-		return GetAdData(jsonFileId, wantedSlotInt, GetSlotChar(jsonFileId, wantedSlotInt, offset, customData), customData);
+		return GetAdDataByChar(jsonFileId, wantedSlotInt, GetSlotChar(jsonFileId, wantedSlotInt, offset, customData), customData);
 	}
 
 	// This was originally just an override of the above function but in Unity 4 char is treated as an int which confuses Unity on which function to use..
