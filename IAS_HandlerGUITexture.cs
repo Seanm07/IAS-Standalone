@@ -37,14 +37,16 @@ public class IAS_Handler : MonoBehaviour {
 		isTextureAssigned = false; // Allows the texture on this IAS ad to be replaced
 	}
 
-	void Update()
-	{
-		if(Input.GetKeyDown(KeyCode.R)){
-			isTextureAssigned = false;
+	#if UNITY_EDITOR
+		void Update()
+		{
+			if(Input.GetKeyDown(KeyCode.R)){
+				isTextureAssigned = false;
 
-			IAS_Manager.RefreshBanners(jsonFileId, adTypeId);
+				IAS_Manager.RefreshBanners(jsonFileId, adTypeId);
+			}
 		}
-	}
+	#endif
 
 	private void OnIASReady()
 	{
