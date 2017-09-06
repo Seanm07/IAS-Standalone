@@ -7,7 +7,7 @@ public class IAS_Handler : MonoBehaviour {
 	public int jsonFileId = 0;
 	[UnityEngine.Serialization.FormerlySerializedAs("bannerID")]
 	public int adTypeId = 1; // 1 = Square, 2 = Tall
-	public bool refreshAfterPlace = false; // Tick this for backscreen banners
+	public int adOffset = 0; // Used for backscreen ads (0, 1, 2)
 
 	private UITexture selfTexture;
 
@@ -37,17 +37,6 @@ public class IAS_Handler : MonoBehaviour {
 		isTextureAssigned = false; // Allows the texture on this IAS ad to be replaced
 	}
 
-	#if UNITY_EDITOR
-		void Update()
-		{
-			if(Input.GetKeyDown(KeyCode.R)){
-				isTextureAssigned = false;
-
-				IAS_Manager.RefreshBanners(jsonFileId, adTypeId);
-			}
-		}
-	#endif
-
 	private void OnIASReady()
 	{
 		SetupAdvert();
@@ -62,17 +51,15 @@ public class IAS_Handler : MonoBehaviour {
 
 	private void SetupAdvert()
 	{
-		if(!isTextureAssigned && IAS_Manager.IsAdReady(jsonFileId, adTypeId)){
-			Texture adTexture = IAS_Manager.GetAdTexture(jsonFileId, adTypeId);
-			activeUrl = IAS_Manager.GetAdURL(jsonFileId, adTypeId);
-			activePackageName = IAS_Manager.GetAdPackageName(jsonFileId, adTypeId);
+		if(!isTextureAssigned && IAS_Manager.IsAdReady(jsonFileId, adTypeId, adOffset)){
+			Texture adTexture = IAS_Manager.GetAdTexture(jsonFileId, adTypeId, adOffset);
+			activeUrl = IAS_Manager.GetAdURL(jsonFileId, adTypeId, adOffset);
+			activePackageName = IAS_Manager.GetAdPackageName(jsonFileId, adTypeId, adOffset);
 
 			selfTexture.mainTexture = adTexture;
 			isTextureAssigned = true;
 
 			IAS_Manager.OnImpression(activePackageName); // DO NOT REMOVE THIS LINE!
-			
-			if(refreshAfterPlace) IAS_Manager.RefreshBanners(jsonFileId, adTypeId);
 		}
 	}
 
