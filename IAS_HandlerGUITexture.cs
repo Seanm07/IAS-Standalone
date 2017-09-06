@@ -74,7 +74,7 @@ public class IAS_Handler : MonoBehaviour {
 		}
 	}
 
-	void OnClick()
+	void OnMouseUp()
 	{
 		if(selfTexture != null && !string.IsNullOrEmpty(activeUrl)){
 			IAS_Manager.OnClick(activePackageName); // DO NOT REMOVE THIS LINE
