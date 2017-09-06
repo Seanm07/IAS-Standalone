@@ -467,7 +467,7 @@ public class IAS_Manager : MonoBehaviour
 
 	private bool DoesSlotCharExist(int jsonFileId, int wantedSlotInt, char wantedSlotChar, List<AdJsonFileData> customData = null)
 	{
-		return ((GetAdData(jsonFileId, wantedSlotInt, wantedSlotChar, customData) == null) ? false : true);
+		return ((GetAdDataByChar(jsonFileId, wantedSlotInt, wantedSlotChar, customData) == null) ? false : true);
 	}
 
 	private int GetSlotIndex(int jsonFileId, int wantedSlotInt, List<AdJsonFileData> customData = null)
@@ -524,7 +524,8 @@ public class IAS_Manager : MonoBehaviour
 		return GetAdData(jsonFileId, wantedSlotInt, GetSlotChar(jsonFileId, wantedSlotInt, offset, customData), customData);
 	}
 
-	private AdData GetAdData(int jsonFileId, int wantedSlotInt, char wantedSlotChar, List<AdJsonFileData> customData = null)
+	// This was originally just an override of the above function but in Unity 4 char is treated as an int which confuses Unity on which function to use..
+	private AdData GetAdDataByChar(int jsonFileId, int wantedSlotInt, char wantedSlotChar, List<AdJsonFileData> customData = null)
 	{
 		AdSlotData curAdSlotData = GetAdSlotData(jsonFileId, wantedSlotInt, customData);
 
@@ -557,7 +558,7 @@ public class IAS_Manager : MonoBehaviour
 			if(customData == null)
 				wantedSlotData.lastSlotId = wantedSlotData.lastSlotId + 1 >= adSlotCount ? 0 : wantedSlotData.lastSlotId + 1;
 			
-			curAdData = GetAdData(jsonFileId, wantedSlotInt, GetSlotChar(jsonFileId, wantedSlotInt, 0, customData), customData);
+			curAdData = GetAdDataByChar(jsonFileId, wantedSlotInt, GetSlotChar(jsonFileId, wantedSlotInt, 0, customData), customData);
 
 			// Never display any self ads or inactive ads
 			if(!curAdData.isSelf && curAdData.isActive){
@@ -578,7 +579,7 @@ public class IAS_Manager : MonoBehaviour
 		for(int i=0;i < maxAdsToPreload+1;i++)
 		{
 			char slotChar =  GetSlotChar(jsonFileId, wantedSlotInt, i);
-			AdData curAdData = GetAdData(jsonFileId, wantedSlotInt, slotChar);
+			AdData curAdData = GetAdDataByChar(jsonFileId, wantedSlotInt, slotChar);
 
 			if(curAdData != null && !curAdData.isDownloading){
 				// Download the texture for the newly selected IAS advert
@@ -641,7 +642,7 @@ public class IAS_Manager : MonoBehaviour
 							yield return wwwImage;
 
 							// Need to re-grab curAdData just incase it has been overwritten
-							curAdData = GetAdData(jsonFileId, wantedSlotInt, slotChar);
+							curAdData = GetAdDataByChar(jsonFileId, wantedSlotInt, slotChar);
 
 							// Check for any errors
 							if(!string.IsNullOrEmpty(wwwImage.error)){
@@ -703,7 +704,7 @@ public class IAS_Manager : MonoBehaviour
 					int slotCharIdCheck = Mathf.Abs(curSlotData.lastSlotId + i + finalOffset) % curSlotData.advert.Count;
 					char slotCharCheck = (char)(slotCharIdCheck + slotIdDecimalOffset);
 
-					AdData curAd = GetAdData(jsonFileId, wantedSlotInt, slotCharCheck);
+					AdData curAd = GetAdDataByChar(jsonFileId, wantedSlotInt, slotCharCheck);
 
 					bool packageNameCollision = false;
 
