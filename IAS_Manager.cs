@@ -129,6 +129,13 @@ public class IAS_Manager : MonoBehaviour
 	public static Action OnIASImageDownloaded;
 	public static Action OnForceChangeWanted;
 
+	// Optimization to group together save calls (also delays saving so they won't happen as soon as the app is launched)
+	private int framesUntilIASSave = -1;
+
+	// Variable to make sure the force save at app quit isn't called multiple times
+	// (is also set back to false if the user comes back to the app from being minimized)
+	private bool hasQuitForceSaveBeenCalled = false;
+
 	#if UNITY_EDITOR
 		// When true the script checks for a new version when entering play mode
 		public bool checkForLatestVersion = true;
@@ -202,6 +209,7 @@ public class IAS_Manager : MonoBehaviour
 
 			// Get all installed packages with a bundleId matching our filter
 			string filteredPackageList = JarLoader.GetPackageList("com.pickle.");
+			//string filteredPackageList = "com.pickle.StreetRacingCarDriver, com.pickle.PoliceMotorbikeSimulator3D, com.pickle.HelicopterFlyingRescueSimulator, com.pickle.PoliceCarDrivingOffroad, com.pickle.police_motorbike_driving_simulator, com.pickle.OffroadDrivingSim6x6, com.pickle.CityDriver, com.pickle.Construction2017"; 
 
 			// Cleanup the package list mistakes (ending comma or any spaces)
 			if(!string.IsNullOrEmpty(filteredPackageList)){
@@ -272,15 +280,23 @@ public class IAS_Manager : MonoBehaviour
 			RefreshActiveAdSlots();
 	}
 
-	#if UNITY_EDITOR
-		void Update()
-		{
+	void Update()
+	{
+		if(framesUntilIASSave > 0){
+			framesUntilIASSave--;
+
+			if(framesUntilIASSave == 0)
+				SaveIASData(true);
+		}
+
+		#if UNITY_EDITOR
 			if(Input.GetKeyDown(KeyCode.R)){
 				IAS_Manager.RefreshBanners(0, 1, true);
 				IAS_Manager.RefreshBanners(0, 2, true);
 			}
-		}
-	#endif
+		#endif
+	}
+	
 
 	private void RefreshActiveAdSlots()
 	{
@@ -422,8 +438,17 @@ public class IAS_Manager : MonoBehaviour
 		}
 	}
 
-	private void SaveIASData()
+	private void SaveIASData(bool forceSave = false)
 	{
+		if(!forceSave){
+			// If the save function is called multiple times within 15 frames it'll just reset the timer before the save happens
+			// Unless forceSave is true which either means the user to quitting the app or framesUntilIASSave is 0
+			framesUntilIASSave = 15;
+			return;
+		} else {
+			framesUntilIASSave = -1;
+		}
+
 		// Make sure the advertData has actually been setup before trying to save it
 		if(advertData != null){
 			string iasData = EncodeIASData();
@@ -467,7 +492,7 @@ public class IAS_Manager : MonoBehaviour
 
 	private bool DoesSlotCharExist(int jsonFileId, int wantedSlotInt, char wantedSlotChar, List<AdJsonFileData> customData = null)
 	{
-		return ((GetAdDataByChar(jsonFileId, wantedSlotInt, wantedSlotChar, customData) == null) ? false : true);
+		return ((GetAdData(jsonFileId, wantedSlotInt, wantedSlotChar, customData) == null) ? false : true);
 	}
 
 	private int GetSlotIndex(int jsonFileId, int wantedSlotInt, List<AdJsonFileData> customData = null)
@@ -521,11 +546,10 @@ public class IAS_Manager : MonoBehaviour
 
 	private AdData GetAdData(int jsonFileId, int wantedSlotInt, int offset, List<AdJsonFileData> customData = null)
 	{
-		return GetAdDataByChar(jsonFileId, wantedSlotInt, GetSlotChar(jsonFileId, wantedSlotInt, offset, customData), customData);
+		return GetAdData(jsonFileId, wantedSlotInt, GetSlotChar(jsonFileId, wantedSlotInt, offset, customData), customData);
 	}
 
-	// This was originally just an override of the above function but in Unity 4 char is treated as an int which confuses Unity on which function to use..
-	private AdData GetAdDataByChar(int jsonFileId, int wantedSlotInt, char wantedSlotChar, List<AdJsonFileData> customData = null)
+	private AdData GetAdData(int jsonFileId, int wantedSlotInt, char wantedSlotChar, List<AdJsonFileData> customData = null)
 	{
 		AdSlotData curAdSlotData = GetAdSlotData(jsonFileId, wantedSlotInt, customData);
 
@@ -558,7 +582,7 @@ public class IAS_Manager : MonoBehaviour
 			if(customData == null)
 				wantedSlotData.lastSlotId = wantedSlotData.lastSlotId + 1 >= adSlotCount ? 0 : wantedSlotData.lastSlotId + 1;
 			
-			curAdData = GetAdDataByChar(jsonFileId, wantedSlotInt, GetSlotChar(jsonFileId, wantedSlotInt, 0, customData), customData);
+			curAdData = GetAdData(jsonFileId, wantedSlotInt, GetSlotChar(jsonFileId, wantedSlotInt, 0, customData), customData);
 
 			// Never display any self ads or inactive ads
 			if(!curAdData.isSelf && curAdData.isActive){
@@ -576,10 +600,13 @@ public class IAS_Manager : MonoBehaviour
 
 	private IEnumerator DownloadAdTexture(int jsonFileId, int wantedSlotInt)
 	{
+		// Wait a frame just so calls to load textures aren't running instantly at app launch
+		yield return null;
+
 		for(int i=0;i < maxAdsToPreload+1;i++)
 		{
 			char slotChar =  GetSlotChar(jsonFileId, wantedSlotInt, i);
-			AdData curAdData = GetAdDataByChar(jsonFileId, wantedSlotInt, slotChar);
+			AdData curAdData = GetAdData(jsonFileId, wantedSlotInt, slotChar);
 
 			if(curAdData != null && !curAdData.isDownloading){
 				// Download the texture for the newly selected IAS advert
@@ -642,7 +669,7 @@ public class IAS_Manager : MonoBehaviour
 							yield return wwwImage;
 
 							// Need to re-grab curAdData just incase it has been overwritten
-							curAdData = GetAdDataByChar(jsonFileId, wantedSlotInt, slotChar);
+							curAdData = GetAdData(jsonFileId, wantedSlotInt, slotChar);
 
 							// Check for any errors
 							if(!string.IsNullOrEmpty(wwwImage.error)){
@@ -684,6 +711,9 @@ public class IAS_Manager : MonoBehaviour
 				if(OnIASImageDownloaded != null)
 					OnIASImageDownloaded.Invoke();
 			}
+
+			// Wait a frame between each ad we preload
+			yield return null;
 		}
 	}
 
@@ -695,7 +725,7 @@ public class IAS_Manager : MonoBehaviour
 			int finalOffset = 0;
 
 			if(customData == null){
-				// Make sure all ads within maxAdsToPreload are unique, otherwise fallback to showing ads already installed then fallback to allowing duplicates
+				// Make sure all ads within preloadPackageNames are unique, otherwise fallback to showing ads already installed then fallback to allowing duplicates
 				List<string> preloadPackageNames = new List<string>();
 
 				for(int i=0;i <= offset;)
@@ -704,20 +734,23 @@ public class IAS_Manager : MonoBehaviour
 					int slotCharIdCheck = Mathf.Abs(curSlotData.lastSlotId + i + finalOffset) % curSlotData.advert.Count;
 					char slotCharCheck = (char)(slotCharIdCheck + slotIdDecimalOffset);
 
-					AdData curAd = GetAdDataByChar(jsonFileId, wantedSlotInt, slotCharCheck);
+					AdData curAd = GetAdData(jsonFileId, wantedSlotInt, slotCharCheck);
 
 					bool packageNameCollision = false;
 
 					foreach(string package in preloadPackageNames){
-						if((finalOffset <= (curSlotData.advert.Count * 2) && curAd.packageName == package) || curAd.isSelf || !curAd.isActive || (finalOffset <= curSlotData.advert.Count && curAd.isInstalled)){
-							finalOffset++;
+						if(curAd.packageName == package)
 							packageNameCollision = true;
-						}
 					}
+
+					if(curAd.isSelf || !curAd.isActive || (finalOffset <= curSlotData.advert.Count && curAd.isInstalled))
+						packageNameCollision = true;
 
 					if(!packageNameCollision){
 						preloadPackageNames.Add(curAd.packageName);
 						i++;
+					} else {
+						finalOffset++;
 					}
 				}
 			}
@@ -963,6 +996,9 @@ public class IAS_Manager : MonoBehaviour
 
 					continue;
 				}
+
+				// Wait a frame between each ad we process (lots of regex aint cheap)
+				yield return null;
 			}
 
 			if(needToRandomizeSlot)
@@ -988,19 +1024,22 @@ public class IAS_Manager : MonoBehaviour
 	// Or on iOS the app is suspended (calling OnApplicationPause(true)) unless "Exit on suspend" is enabled
 	void OnApplicationQuit()
 	{
-		SaveIASData();
-	}
+		if(hasQuitForceSaveBeenCalled) return;
 
-	void OnApplicationFocus(bool focusState)
-	{
-		if(!focusState)
-			SaveIASData();
+		SaveIASData(true);
+		hasQuitForceSaveBeenCalled = true;
 	}
 
 	void OnApplicationPause(bool pauseState)
 	{
-		if(pauseState)
-			SaveIASData();
+		if(pauseState){
+			if(hasQuitForceSaveBeenCalled) return;
+
+			SaveIASData(true);
+			hasQuitForceSaveBeenCalled = true;
+		} else {
+			hasQuitForceSaveBeenCalled = false;
+		}
 	}
 
 	/// <summary>
