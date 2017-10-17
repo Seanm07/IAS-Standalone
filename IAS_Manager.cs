@@ -574,29 +574,16 @@ public class IAS_Manager : MonoBehaviour
 		
 		AdSlotData wantedSlotData = GetAdSlotData(jsonFileId, wantedSlotInt, customData);
 
-		bool isValidAd = false;
-		AdData curAdData = null;
+		if(customData == null){
+			// Calculate the next valid slot char to be displayed
+			char wantedSlotChar = GetSlotChar(jsonFileId, wantedSlotInt, 0, customData);
+			wantedSlotData.lastSlotId = (((int)wantedSlotChar) - slotIdDecimalOffset);
 
-		int adSlotCount = wantedSlotData.advert.Count;
-
-		for(int i=0;!isValidAd && i < (adSlotCount*2);i++){
-			if(customData == null)
-				wantedSlotData.lastSlotId = wantedSlotData.lastSlotId + 1 >= adSlotCount ? 0 : wantedSlotData.lastSlotId + 1;
-			
-			curAdData = GetAdDataByChar(jsonFileId, wantedSlotInt, GetSlotChar(jsonFileId, wantedSlotInt, 0, customData), customData);
-
-			// Never display any self ads or inactive ads
-			if(!curAdData.isSelf && curAdData.isActive){
-				// Only apps which are not already installed are valid UNLESS we iterated through all ads and could not find a valid one
-				if(!curAdData.isInstalled || i >= adSlotCount){
-					isValidAd = true;
-				}
-			}
+			if(advancedLogging)
+				Debug.Log("Last char was " + wantedSlotChar);
 		}
 
-		if(isValidAd){
-			StartCoroutine(DownloadAdTexture(jsonFileId, wantedSlotInt));
-		}
+		StartCoroutine(DownloadAdTexture(jsonFileId, wantedSlotInt));
 	}
 
 	private IEnumerator DownloadAdTexture(int jsonFileId, int wantedSlotInt)
@@ -604,10 +591,14 @@ public class IAS_Manager : MonoBehaviour
 		// Wait a frame just so calls to load textures aren't running instantly at app launch
 		yield return null;
 
-		for(int i=0;i < maxAdsToPreload+1;i++)
+		// We only need to preload ads for slotInt 1 which is the square ads for the backscreen
+		for(int i=0;i < (wantedSlotInt == 1 ? maxAdsToPreload+1 : 1);i++)
 		{
 			char slotChar =  GetSlotChar(jsonFileId, wantedSlotInt, i);
 			AdData curAdData = GetAdDataByChar(jsonFileId, wantedSlotInt, slotChar);
+
+			if(advancedLogging)
+				Debug.Log("(char: " + slotChar + ") Load tex for " + curAdData.adUrl);
 
 			if(curAdData != null && !curAdData.isDownloading){
 				// Download the texture for the newly selected IAS advert
@@ -732,7 +723,7 @@ public class IAS_Manager : MonoBehaviour
 				for(int i=0;i <= offset;)
 				{
 					// Manual modulo to support negative numbers
-					int slotCharIdCheck = Mathf.Abs(curSlotData.lastSlotId + i + finalOffset) % curSlotData.advert.Count;
+					int slotCharIdCheck = Mathf.Abs((curSlotData.lastSlotId + 1) + i + finalOffset) % curSlotData.advert.Count;
 					char slotCharCheck = (char)(slotCharIdCheck + slotIdDecimalOffset);
 
 					AdData curAd = GetAdDataByChar(jsonFileId, wantedSlotInt, slotCharCheck);
@@ -756,7 +747,7 @@ public class IAS_Manager : MonoBehaviour
 				}
 			}
 
-			int wantedSlotCharId = (curSlotData.lastSlotId + finalOffset + offset) % curSlotData.advert.Count;
+			int wantedSlotCharId = ((curSlotData.lastSlotId + 1) + finalOffset + offset) % curSlotData.advert.Count;
 			char wantedSlotChar = (char)(wantedSlotCharId + slotIdDecimalOffset);
 
 			return wantedSlotChar;
@@ -1077,6 +1068,9 @@ public class IAS_Manager : MonoBehaviour
 				Debug.LogError("(Editor Only) Attempted to refresh a blacklisted banner slot! (Slot " + wantedSlotInt + ") This will do nothing");
 			#endif
 
+			if(Instance.advancedLogging)
+				Debug.Log("Refresh failed, blacklisted? Slot " + wantedSlotInt);
+
 			return;
 		}
 
@@ -1086,8 +1080,9 @@ public class IAS_Manager : MonoBehaviour
 		Instance.IncSlotChar(jsonFileId, wantedSlotInt, customData);
 
 		if(forceChangeActive){
-			if(OnForceChangeWanted != null)
+			if(OnForceChangeWanted != null){
 				OnForceChangeWanted.Invoke();
+			}
 		}
 	}
 
