@@ -8,7 +8,7 @@ public class IAS_HandlerCanvas : MonoBehaviour
 	public int jsonFileId = 0;
 	[UnityEngine.Serialization.FormerlySerializedAs("bannerID")]
 	public int adTypeId = 1; // 1 = Square, 2 = Tall
-	public int adOffset = 0; // Used for backscreen ads (0, 1, 2)
+	public int adOffset = 0; // Used for backscreen ads (1, 2, 3)
 
 	private string activeUrl;
 	private string activePackageName;
