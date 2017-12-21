@@ -9,7 +9,16 @@ When refreshing adverts make sure to only refresh what you need, e.g don't refre
 
 Note! If you're not using a certain size banner it's still best to blacklist them (see blacklisting step in setup section) because 1 ad of all sizes is still preloaded ready to be displayed AND restarting the app jumps ads to the next in queue so eventually all ads would be on the disk.
 
-## Setup:
+## IAS Plugin Setup
+- Download our java plugin [a link](http://data.i6.com/IAS/GamePickle/Pickle_GetPackages.jar)Pickle_GetPackages.jar 
+- Put Pickle_GetPackages.jar inside **/Plugins/Android/** (create the folders if they don't exist)
+- Download [a link](http://data.i6.com/IAS/GamePickle/JarLoader.cs)JarLoader.cs (Script which interacts with the Java plugin)
+- Attach JarLoader.cs to a persistent gameobject in your initial scene (put this on a gameobject which is never destroyed)
+
+- If you are using Unity 4 or an early version of Unity 5 download SimpleJSON.cs (Plugin which parses the JSON data, later versions of Unity have a built in JSON parser)
+- Put SimpleJSON.cs inside **/Plugins/**
+
+## IAS Manager Script Setup:
 - Import IAS_Manager.cs
 - Attach IAS_Manager.cs to a Game Object which will never be destroyed in the earliest scene possible (ads can start loading as soon as the script is active) make sure also never to create a duplicate of the script, you will be given an error if you do
 - Fill in the inspector values
