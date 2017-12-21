@@ -9,6 +9,9 @@ When refreshing adverts make sure to only refresh what you need, e.g don't refre
 
 Note! If you're not using a certain size banner it's still best to blacklist them (see blacklisting step in setup section) because 1 ad of all sizes is still preloaded ready to be displayed AND restarting the app jumps ads to the next in queue so eventually all ads would be on the disk.
 
+## Prerequisites
+Make sure your project is already setup to use the GoogleAnalytics V4 plugin. [You can read more information about this in our developers doc here!](https://docs.google.com/document/d/1HxqJY56W8jzDABvCooL6gsfMjP4uLd2E5Dy6FLXGnbA/edit#heading=h.4d3y7jvs7802)
+
 ## IAS Plugin Setup
 - Download our java plugin [Pickle_GetPackages.jar](http://data.i6.com/IAS/GamePickle/Pickle_GetPackages.jar) 
 - Put Pickle_GetPackages.jar inside **/Plugins/Android/** ***(create the folders if they don't exist)***
