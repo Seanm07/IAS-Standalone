@@ -15,7 +15,8 @@ Note! If you're not using a certain size banner it's still best to blacklist the
 - Download [JarLoader.cs](http://data.i6.com/IAS/GamePickle/JarLoader.cs) (Script which interacts with the Java plugin)
 - Attach JarLoader.cs to a persistent gameobject in your initial scene (put this on a gameobject which is never destroyed)
 
-- If you are using Unity 4 or an early version of Unity 5 download SimpleJSON.cs (Plugin which parses the JSON data, later versions of Unity have a built in JSON parser)
+### Unity 4 / early 5 only
+- If you are using Unity 4 or an early version of Unity 5 download [SimpleJSON.cs](http://pastebin.com/38gyz4mB) (Plugin which parses the JSON data, later versions of Unity have a built in JSON parser)
 - Put SimpleJSON.cs inside **/Plugins/**
 
 ## IAS Manager Script Setup:
