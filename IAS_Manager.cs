@@ -99,15 +99,23 @@ public class IAS_Manager : MonoBehaviour
 		public string appVersion { get; private set; }
 	#endif
 
-	private int internalScriptVersion = 13;
+	private int internalScriptVersion = 14;
+
+	public enum Platform { 
+		#if UNITY_IOS 
+			iOSStandard
+		#else 
+			AndroidStandard, 
+			AndroidTV
+		#endif 
+	}
+	public Platform platform;
 
 	// JSON URLs where the ads are grabbed from
 	#if UNITY_IOS
-		public string[] jsonUrls = new string[1]{"http://ias.gamepicklestudios.com/ad/3.json"};
-	#elif UNITY_WP_8_1
-		public string[] jsonUrls = new string[1]{"http://ias.gamepicklestudios.com/ad/4.json"};
+		public string[] jsonUrls = new string[1]{"http://ads2.gumdropgames.com/ad/3.json"};
 	#else
-		public string[] jsonUrls = new string[1]{"http://ias.gamepicklestudios.com/ad/1.json"};
+		public string[] jsonUrls = new string[1]{"http://ads2.gumdropgames.com/ad/1.json"}; // http://ads2.gumdropgames.com/ad/4.json
 	#endif
 
 	private int slotIdDecimalOffset = 97; // Decimal offset used to start our ASCII character at 'a'
@@ -208,13 +216,28 @@ public class IAS_Manager : MonoBehaviour
 			installedApps.Clear();
 
 			// Get all installed packages with a bundleId matching our filter
-			string filteredPackageList = JarLoader.GetPackageList("com.pickle.");
+			string filteredPackageListPickle = JarLoader.GetPackageList("com.pickle.");
+			string filteredPackageListGumdrop = JarLoader.GetPackageList("com.gumdropgames.");
 			//string filteredPackageList = "com.pickle.StreetRacingCarDriver, com.pickle.PoliceMotorbikeSimulator3D, com.pickle.HelicopterFlyingRescueSimulator, com.pickle.PoliceCarDrivingOffroad, com.pickle.police_motorbike_driving_simulator, com.pickle.OffroadDrivingSim6x6, com.pickle.CityDriver, com.pickle.Construction2017"; 
+
+			int installedPickleCount = 0; 
+			int installedGumdropGames = 0;
+
+			// Added a length check because I can't remember if there's just a comma or 2 spaces and a comma if the list is empty
+			string filteredPackageList = (filteredPackageListPickle.Length >= 3 ? filteredPackageListPickle : "") + filteredPackageListGumdrop;
 
 			// Cleanup the package list mistakes (ending comma or any spaces)
 			if(!string.IsNullOrEmpty(filteredPackageList)){
 				filteredPackageList = filteredPackageList.Trim(); // Trim whitespaces
 				filteredPackageList = filteredPackageList.Remove(filteredPackageList.Length - 1); // Remove the unwanted comma at the end of the list
+
+				filteredPackageListPickle = filteredPackageListPickle.Trim();
+				filteredPackageListPickle = filteredPackageList.Remove(filteredPackageListPickle.Length - 1);
+				installedPickleCount = filteredPackageListPickle.Split(",".ToCharArray(), StringSplitOptions.RemoveEmptyEntries).Length;
+
+				filteredPackageListGumdrop = filteredPackageListGumdrop.Trim();
+				filteredPackageListGumdrop = filteredPackageListGumdrop.Remove(filteredPackageListGumdrop.Length - 1);
+				installedGumdropGames = filteredPackageListGumdrop.Split(",".ToCharArray(), StringSplitOptions.RemoveEmptyEntries).Length;
 
 				// Split the list into a string array
 				string[] packageArray = filteredPackageList.Split(",".ToCharArray(), StringSplitOptions.RemoveEmptyEntries);
@@ -234,7 +257,8 @@ public class IAS_Manager : MonoBehaviour
 			}
 
 			if (!PlayerPrefs.HasKey ("IASTotalGamesLogged")) {
-				GoogleAnalytics.Instance.IASLogEvent("Total GamePickle games installed", installedApps.Count.ToString());
+				GoogleAnalytics.Instance.IASLogEvent("Total GamePickle games installed", installedPickleCount.ToString());
+				GoogleAnalytics.Instance.IASLogEvent("Total GumDrop games installed", installedGumdropGames.ToString());
 				PlayerPrefs.SetInt ("IASTotalGamesLogged", 1);
 			}
 		}
@@ -246,6 +270,13 @@ public class IAS_Manager : MonoBehaviour
 			Debug.LogError("You have multiple IAS_Manager.cs scripts!");
 
 		Instance = (Instance == null ? this : Instance);
+
+		// If the line below is giving you an error then you also need to update your GoogleAnalytics.cs, download the latest here: http://data.i6.com/IAS/GoogleAnalytics.cs
+		if(GoogleAnalytics.Instance.IASPropertyID != "UA-86209874-4")
+			Debug.LogError("Invalid IAS property ID! You may be used an old version of GoogleAnalytics.cs - Download the latest from http://data.i6.com/IAS/GoogleAnalytics.cs");
+
+		if(platform == Platform.AndroidTV)
+			jsonUrls[0] = "http://ias.gamepicklestudios.com/ad/6.json"; // http://ads2.gumdropgames.com/ad/8.json
 
 		#if (UNITY_5 || UNITY_2017) && UNITY_ANDROID
 			bundleId = Application.identifier;
@@ -263,7 +294,7 @@ public class IAS_Manager : MonoBehaviour
 
 	void Start()
 	{
-		Debug.Log("GamePickle IAS Init [" + internalScriptVersion + "] " + bundleId  + " (" + appVersion + ")");
+		Debug.Log("IAS Init [" + internalScriptVersion + "] " + bundleId  + " (" + appVersion + ") - IASLog[" + (GoogleAnalytics.Instance.IASPropertyID == "UA-86209874-4" ? "PASS" : "FAIL") + "] ImpLog[" + (logAdImpressions ? "PASS" : "FAIL") + "] ClkLog[" + (logAdClicks ? "PASS" : "FAIL") + "]");
 
 		#if UNITY_ANDROID
 			// Get a list of installed packages on the device and store ones matching a filter
@@ -577,6 +608,7 @@ public class IAS_Manager : MonoBehaviour
 		if(customData == null){
 			// Calculate the next valid slot char to be displayed
 			char wantedSlotChar = GetSlotChar(jsonFileId, wantedSlotInt, 0, customData);
+
 			wantedSlotData.lastSlotId = (((int)wantedSlotChar) - slotIdDecimalOffset);
 
 			if(advancedLogging)
@@ -592,9 +624,9 @@ public class IAS_Manager : MonoBehaviour
 		yield return null;
 
 		// We only need to preload ads for slotInt 1 which is the square ads for the backscreen
-		for(int i=0;i < (wantedSlotInt == 1 ? maxAdsToPreload+1 : 1);i++)
+		for(int i=0;i < (wantedSlotInt == 1 ? maxAdsToPreload+1 : 1) && (i < advertData[jsonFileId].slotInts[wantedSlotInt-1].advert.Count);i++)
 		{
-			char slotChar =  GetSlotChar(jsonFileId, wantedSlotInt, i);
+			char slotChar = GetSlotChar(jsonFileId, wantedSlotInt, i);
 			AdData curAdData = GetAdDataByChar(jsonFileId, wantedSlotInt, slotChar);
 
 			if(advancedLogging)
@@ -709,6 +741,30 @@ public class IAS_Manager : MonoBehaviour
 		}
 	}
 
+	private int GetUniqueUsableAdCount(int jsonFileId, int wantedSlotInt)
+	{
+		List<AdData> allSlotAds = advertData[jsonFileId].slotInts[wantedSlotInt-1].advert;
+
+		List<string> processedPackageNames = new List<string>();
+
+		for(int i=0;i < allSlotAds.Count;i++)
+		{
+			if(!allSlotAds[i].isSelf && allSlotAds[i].isActive){
+				bool packageNameAlreadyProcessed = false;
+
+				foreach(string package in processedPackageNames){
+					if(allSlotAds[i].packageName == package)
+						packageNameAlreadyProcessed = true;
+				}
+
+				if(!packageNameAlreadyProcessed)
+					processedPackageNames.Add(allSlotAds[i].packageName);
+			}
+		}
+
+		return processedPackageNames.Count;
+	}
+
 	private char GetSlotChar(int jsonFileId, int wantedSlotInt, int offset = 0, List<AdJsonFileData> customData = null)
 	{
 		AdSlotData curSlotData = GetAdSlotData(jsonFileId, wantedSlotInt, customData);
@@ -720,7 +776,9 @@ public class IAS_Manager : MonoBehaviour
 				// Make sure all ads within preloadPackageNames are unique, otherwise fallback to showing ads already installed then fallback to allowing duplicates
 				List<string> preloadPackageNames = new List<string>();
 
-				for(int i=0;i <= offset;)
+				int totalAds = curSlotData.advert.Count;
+
+				for(int i=0;i <= offset && finalOffset < (totalAds * 2);)
 				{
 					// Manual modulo to support negative numbers
 					int slotCharIdCheck = Mathf.Abs((curSlotData.lastSlotId + 1) + i + finalOffset) % curSlotData.advert.Count;
@@ -735,7 +793,7 @@ public class IAS_Manager : MonoBehaviour
 							packageNameCollision = true;
 					}
 
-					if(curAd.isSelf || !curAd.isActive || (finalOffset <= curSlotData.advert.Count && curAd.isInstalled))
+					if(curAd.isSelf || !curAd.isActive || (finalOffset <= totalAds && curAd.isInstalled))
 						packageNameCollision = true;
 
 					if(!packageNameCollision){
@@ -747,10 +805,16 @@ public class IAS_Manager : MonoBehaviour
 				}
 			}
 
-			int wantedSlotCharId = ((curSlotData.lastSlotId + 1) + finalOffset + offset) % curSlotData.advert.Count;
-			char wantedSlotChar = (char)(wantedSlotCharId + slotIdDecimalOffset);
+			int wantedSlotCharId = ((curSlotData.lastSlotId + 1) + finalOffset + offset) % curSlotData.advert.Count; // If we use modulo here then empty ad slots would have ads but it would mean duplicate ads could appear on the backscreen together
 
-			return wantedSlotChar;
+			// Remove this to allow duplicate ads to show on the backscreen when there's not enough ads in the slot to fill it
+			if(wantedSlotCharId - (offset-1) < 0){
+				return default(char);
+			} else {
+				char wantedSlotChar = (char)(wantedSlotCharId + slotIdDecimalOffset);
+
+				return wantedSlotChar;
+			}
 		} else {
 			return default(char);
 		}
@@ -1037,23 +1101,23 @@ public class IAS_Manager : MonoBehaviour
 	/// <summary>
 	/// Call this for every IAS advert the player views
 	/// </summary>
-	/// <param name="url">Advert URL</param>
-	public static void OnImpression(string packageName = "")
+	/// <param name="packageName">Advert package name</param>
+	/// <param name="isBackscreen">Is this a backscreen advert</param>
+	public static void OnImpression(string packageName, bool isBackscreen)
 	{
-		if(Instance.logAdImpressions){
-			GoogleAnalytics.Instance.IASLogEvent("IAS View", packageName);
-		}
+		if(Instance.logAdImpressions)
+			GoogleAnalytics.Instance.IASLogEvent("IAS Views", Instance.bundleId + " " + (isBackscreen ? "(backscreen)" : "(main)"), packageName);
 	}
 
 	/// <summary>
 	/// Call this for every IAS advert the player clicks
 	/// </summary>
-	/// <param name="url">Advert URL</param>
-	public static void OnClick(string packageName)
+	/// <param name="packageName">Advert package name</param>
+	/// <param name="isBackscreen">Is this a backscreen advert</param>
+	public static void OnClick(string packageName, bool isBackscreen)
 	{
-		if(Instance.logAdClicks){
-			GoogleAnalytics.Instance.IASLogEvent("IAS Clicks", packageName);
-		}
+		if(Instance.logAdClicks)
+			GoogleAnalytics.Instance.IASLogEvent("IAS Clicks", Instance.bundleId + " " + (isBackscreen ? "(backscreen)" : "(main)"), packageName);
 	}
 
 	/// <summary>
