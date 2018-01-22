@@ -59,14 +59,14 @@ public class IAS_Handler : MonoBehaviour {
 			selfTexture.texture = adTexture;
 			isTextureAssigned = true;
 
-			IAS_Manager.OnImpression(activePackageName); // DO NOT REMOVE THIS LINE
+			IAS_Manager.OnImpression(activePackageName, adOffset != 0); // DO NOT REMOVE THIS LINE
 		}
 	}
 
 	void OnMouseUp()
 	{
 		if(selfTexture != null && !string.IsNullOrEmpty(activeUrl)){
-			IAS_Manager.OnClick(activePackageName); // DO NOT REMOVE THIS LINE
+			IAS_Manager.OnClick(activePackageName, adOffset != 0); // DO NOT REMOVE THIS LINE
 
 			Application.OpenURL(activeUrl);
 		}
