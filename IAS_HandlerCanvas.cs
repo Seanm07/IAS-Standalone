@@ -77,14 +77,14 @@ public class IAS_HandlerCanvas : MonoBehaviour
 			selfImage.sprite = Sprite.Create(adTexture, new Rect(0f, 0f, adTexture.width, adTexture.height), new Vector2(adTexture.width / 2f, adTexture.height / 2f));
 			isTextureAssigned = true;
 
-			IAS_Manager.OnImpression(activePackageName); // DO NOT REMOVE THIS LINE
+			IAS_Manager.OnImpression(activePackageName, adOffset != 0); // DO NOT REMOVE THIS LINE
 		}
 	}
 
 	void OnMouseUp()
 	{
 		if(selfImage != null && !string.IsNullOrEmpty(activeUrl)){
-			IAS_Manager.OnClick(activePackageName); // DO NOT REMOVE THIS LINE
+			IAS_Manager.OnClick(activePackageName, adOffset != 0); // DO NOT REMOVE THIS LINE
 
 			Application.OpenURL(activeUrl);
 		}
