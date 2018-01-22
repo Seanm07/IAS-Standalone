@@ -1,5 +1,10 @@
 # IAS Manager Documentation
 
+## January 22nd 2018 Update Notes
+Once you've updated IAS_Manager.cs you'll also need to update your IAS Handler script too, you can either re-download a handler from the github page or add adOffset != 0 as a second parameter to the OnImpression(..) and OnClick(..) function calls from the handler script.
+
+You'll then finally also need to update GoogleAnalytics.cs for this just simply replace the script in your project with this one: http://data.i6.com/IAS/GoogleAnalytics.cs
+
 ## Pre-notes
 The new IAS script now supports multiple json urls instead of a json file for the main and backscreen banners, generally you'll only be using 1 json file but in some cases multiple may be used. You interact with each json file using the order of assignment in the inspector for the jsonUrls array e.g the first json file is 0 then 1 then 2 etc.
 
