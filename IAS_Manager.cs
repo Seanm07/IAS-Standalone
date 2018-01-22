@@ -272,8 +272,12 @@ public class IAS_Manager : MonoBehaviour
 		Instance = (Instance == null ? this : Instance);
 
 		// If the line below is giving you an error then you also need to update your GoogleAnalytics.cs, download the latest here: http://data.i6.com/IAS/GoogleAnalytics.cs
-		if(GoogleAnalytics.Instance.IASPropertyID != "UA-86209874-4")
-			Debug.LogError("Invalid IAS property ID! You may be used an old version of GoogleAnalytics.cs - Download the latest from http://data.i6.com/IAS/GoogleAnalytics.cs");
+		if(GoogleAnalytics.Instance.IASPropertyID != "UA-86209874-4"){
+			Debug.LogError("Invalid IAS property ID! Old version of GoogleAnalytics.cs? Get latest at http://data.i6.com/IAS/GoogleAnalytics.cs\n\nAlso make sure IAS Property ID is set to UA-86209874-4 in the inspector!");
+			#if UNITY_EDITOR
+				EditorUtility.DisplayDialog("Invalid IAS property ID!", "Old version of GoogleAnalytics.cs? Get latest at http://data.i6.com/IAS/GoogleAnalytics.cs\n\nAlso make sure IAS Property ID is set to UA-86209874-4 in the inspector!", "OK (Message also appears in console)");
+			#endif
+		}
 
 		if(platform == Platform.AndroidTV)
 			jsonUrls[0] = "http://ias.gamepicklestudios.com/ad/6.json"; // http://ads2.gumdropgames.com/ad/8.json
