@@ -7,7 +7,7 @@ using System.Text.RegularExpressions;
 using System.Runtime.Serialization.Formatters.Binary;
 using System.Runtime.Serialization;
 
-#if !UNITY_5 && !UNITY_2017
+#if !UNITY_5_3_OR_NEWER
 	// Older versions of Unity don't have the built in JSONUtility so SimpleJSON is required
 	using SimpleJSON;
 #endif
@@ -39,7 +39,7 @@ public class AdSlotData {
 	{
 		slotInt = newSlotInt;
 		advert = (newAdvert == null ? new List<AdData>() : newAdvert);
-	}
+	} 
 }
 
 [Serializable]
@@ -91,7 +91,7 @@ public class IAS_Manager : MonoBehaviour
 {
 	public static IAS_Manager Instance;
 
-	#if (!UNITY_5 && !UNITY_2017) || !UNITY_ANDROID
+	#if (!UNITY_5_3_OR_NEWER) || !UNITY_ANDROID
 		public string bundleId = "com.example.GameNameHere";
 		public string appVersion = "1.00";
 	#else
@@ -99,23 +99,16 @@ public class IAS_Manager : MonoBehaviour
 		public string appVersion { get; private set; }
 	#endif
 
-	private int internalScriptVersion = 14;
+	private int internalScriptVersion = 20;
 
-	public enum Platform { 
-		#if UNITY_IOS 
-			iOSStandard
-		#else 
-			AndroidStandard, 
-			AndroidTV
-		#endif 
-	}
-	public Platform platform;
+	public enum Platform { Standard, TV }
+	public Platform platform = Platform.Standard;
 
 	// JSON URLs where the ads are grabbed from
 	#if UNITY_IOS
-		public string[] jsonUrls = new string[1]{"http://ads2.gumdropgames.com/ad/3.json"};
+		public string[] jsonUrls = new string[1]{"https://ias.gamepicklestudios.com/ad/3.json"};
 	#else
-		public string[] jsonUrls = new string[1]{"http://ads2.gumdropgames.com/ad/1.json"}; // http://ads2.gumdropgames.com/ad/4.json
+	public string[] jsonUrls = new string[1]{"https://ias.gamepicklestudios.com/ad/1.json"}; // https://ads2.gumdropgames.com/ad/4.json
 	#endif
 
 	private int slotIdDecimalOffset = 97; // Decimal offset used to start our ASCII character at 'a'
@@ -150,7 +143,7 @@ public class IAS_Manager : MonoBehaviour
 	
 		private IEnumerator CheckIASVersion()
 		{
-			WWW versionCheck = new WWW("http://data.i6.com/IAS/ias_check.txt");
+			WWW versionCheck = new WWW("https://data.i6.com/IAS/ias_check.txt");
 
 			yield return versionCheck;
 
@@ -169,7 +162,7 @@ public class IAS_Manager : MonoBehaviour
 						// Re-add Assets/ but also remove the data path so the path starts at Assets/
 						scriptPath = scriptPath.Replace(Application.dataPath.Replace("Assets", ""), "Assets/");
 
-						WWW scriptDownload = new WWW("http://data.i6.com/IAS/GamePickle/IAS_Manager.cs");
+						WWW scriptDownload = new WWW("https://data.i6.com/IAS/GamePickle/IAS_Manager.cs");
 
 						yield return scriptDownload;
 
@@ -229,15 +222,24 @@ public class IAS_Manager : MonoBehaviour
 			// Cleanup the package list mistakes (ending comma or any spaces)
 			if(!string.IsNullOrEmpty(filteredPackageList)){
 				filteredPackageList = filteredPackageList.Trim(); // Trim whitespaces
-				filteredPackageList = filteredPackageList.Remove(filteredPackageList.Length - 1); // Remove the unwanted comma at the end of the list
+
+				if(filteredPackageList.Length > 0){
+					filteredPackageList = filteredPackageList.Remove(filteredPackageList.Length - 1); // Remove the unwanted comma at the end of the list
+				}
 
 				filteredPackageListPickle = filteredPackageListPickle.Trim();
-				filteredPackageListPickle = filteredPackageList.Remove(filteredPackageListPickle.Length - 1);
-				installedPickleCount = filteredPackageListPickle.Split(",".ToCharArray(), StringSplitOptions.RemoveEmptyEntries).Length;
+
+				if(filteredPackageListPickle.Length > 0){
+					filteredPackageListPickle = filteredPackageListPickle.Remove(filteredPackageListPickle.Length - 1);
+					installedPickleCount = filteredPackageListPickle.Split(",".ToCharArray(), StringSplitOptions.RemoveEmptyEntries).Length;
+				}
 
 				filteredPackageListGumdrop = filteredPackageListGumdrop.Trim();
-				filteredPackageListGumdrop = filteredPackageListGumdrop.Remove(filteredPackageListGumdrop.Length - 1);
-				installedGumdropGames = filteredPackageListGumdrop.Split(",".ToCharArray(), StringSplitOptions.RemoveEmptyEntries).Length;
+
+				if(filteredPackageListGumdrop.Length > 0){
+					filteredPackageListGumdrop = filteredPackageListGumdrop.Remove(filteredPackageListGumdrop.Length - 1);
+					installedGumdropGames = filteredPackageListGumdrop.Split(",".ToCharArray(), StringSplitOptions.RemoveEmptyEntries).Length;
+				}
 
 				// Split the list into a string array
 				string[] packageArray = filteredPackageList.Split(",".ToCharArray(), StringSplitOptions.RemoveEmptyEntries);
@@ -266,23 +268,18 @@ public class IAS_Manager : MonoBehaviour
 
 	void Awake()
 	{
-		if(Instance != null)
-			Debug.LogError("You have multiple IAS_Manager.cs scripts!");
+		// Destroy if this already exists
+		if(Instance){
+			Destroy(this);
+			return;
+		}
 
 		Instance = (Instance == null ? this : Instance);
 
-		// If the line below is giving you an error then you also need to update your GoogleAnalytics.cs, download the latest here: http://data.i6.com/IAS/GoogleAnalytics.cs
-		if(GoogleAnalytics.Instance.IASPropertyID != "UA-86209874-4"){
-			Debug.LogError("Invalid IAS property ID! Old version of GoogleAnalytics.cs? Get latest at http://data.i6.com/IAS/GoogleAnalytics.cs\n\nAlso make sure IAS Property ID is set to UA-86209874-4 in the inspector!");
-			#if UNITY_EDITOR
-				EditorUtility.DisplayDialog("Invalid IAS property ID!", "Old version of GoogleAnalytics.cs? Get latest at http://data.i6.com/IAS/GoogleAnalytics.cs\n\nAlso make sure IAS Property ID is set to UA-86209874-4 in the inspector!", "OK (Message also appears in console)");
-			#endif
-		}
+		if(platform == Platform.TV)
+			jsonUrls[0] = "https://ias.gamepicklestudios.com/ad/6.json"; // https://ads2.gumdropgames.com/ad/8.json
 
-		if(platform == Platform.AndroidTV)
-			jsonUrls[0] = "http://ias.gamepicklestudios.com/ad/6.json"; // http://ads2.gumdropgames.com/ad/8.json
-
-		#if (UNITY_5 || UNITY_2017) && UNITY_ANDROID
+		#if (UNITY_5 || UNITY_2017 || UNITY_2018) && UNITY_ANDROID
 			bundleId = Application.identifier;
 			appVersion = Application.version;
 		#else
@@ -298,6 +295,15 @@ public class IAS_Manager : MonoBehaviour
 
 	void Start()
 	{
+		// If the line below is giving you an error then you also need to update your GoogleAnalytics.cs, download the latest here: https://data.i6.com/IAS/GoogleAnalytics.cs
+		if(GoogleAnalytics.Instance.IASPropertyID != "UA-120537332-1"){
+			Debug.LogError("Invalid IAS property ID! Make sure the IAS Property ID is set to UA-120537332-1 in the inspector of GoogleAnalytics.cs!");
+
+			#if UNITY_EDITOR
+			EditorUtility.DisplayDialog("Invalid IAS property ID!", "Make sure the IAS Property ID is set to UA-120537332-1 in the inspector of GoogleAnalytics.cs!", "OK (Message also appears in console)");
+			#endif
+		}
+
 		Debug.Log("IAS Init [" + internalScriptVersion + "] " + bundleId  + " (" + appVersion + ") - IASLog[" + (GoogleAnalytics.Instance.IASPropertyID == "UA-86209874-4" ? "PASS" : "FAIL") + "] ImpLog[" + (logAdImpressions ? "PASS" : "FAIL") + "] ClkLog[" + (logAdClicks ? "PASS" : "FAIL") + "]");
 
 		#if UNITY_ANDROID
@@ -324,12 +330,12 @@ public class IAS_Manager : MonoBehaviour
 				SaveIASData(true);
 		}
 
-		#if UNITY_EDITOR
+		/*#if UNITY_EDITOR
 			if(Input.GetKeyDown(KeyCode.R)){
 				IAS_Manager.RefreshBanners(0, 1, true);
 				IAS_Manager.RefreshBanners(0, 2, true);
 			}
-		#endif
+		#endif*/
 	}
 	
 
@@ -401,8 +407,8 @@ public class IAS_Manager : MonoBehaviour
 					curOutputAdvert.isDownloading = curInputAdvert.isDownloading;
 					curOutputAdvert.lastUpdated = curInputAdvert.lastUpdated;
 					curOutputAdvert.newUpdateTime = curInputAdvert.newUpdateTime;
-					curOutputAdvert.imgUrl = curInputAdvert.imgUrl;
-					curOutputAdvert.adUrl = curInputAdvert.adUrl;
+					curOutputAdvert.imgUrl = ConvertToSecureProtocol(curInputAdvert.imgUrl);
+					curOutputAdvert.adUrl = ConvertToSecureProtocol(curInputAdvert.adUrl);
 					curOutputAdvert.packageName = curInputAdvert.packageName;
 					curOutputAdvert.adTextureId = curInputAdvert.adTextureId;
 				}
@@ -410,6 +416,14 @@ public class IAS_Manager : MonoBehaviour
 		}
 
 		return output;
+	}
+
+	private string ConvertToSecureProtocol(string inputURL)
+	{
+		if(!inputURL.Contains("https://"))
+			inputURL.Replace("http://", "https://");
+
+		return inputURL;
 	}
 
 	private string EncodeIASData()
@@ -633,8 +647,13 @@ public class IAS_Manager : MonoBehaviour
 			char slotChar = GetSlotChar(jsonFileId, wantedSlotInt, i);
 			AdData curAdData = GetAdDataByChar(jsonFileId, wantedSlotInt, slotChar);
 
-			if(advancedLogging)
+			if(advancedLogging){
+				Debug.Log("char was " + slotChar);
+				Debug.Log("i was " + i);
+
 				Debug.Log("(char: " + slotChar + ") Load tex for " + curAdData.adUrl);
+
+			}
 
 			if(curAdData != null && !curAdData.isDownloading){
 				// Download the texture for the newly selected IAS advert
@@ -711,7 +730,12 @@ public class IAS_Manager : MonoBehaviour
 								yield break;
 							}
 
-							advertTextures.Add(wwwImage.texture);
+							// Create a template texture for the downloaded image to be loaded into, this lets us set the compression type and disable mipmaps (we disable mipmaps so the texture quality setting doesn't affect IAS ads) 
+							Texture2D imageTexture = new Texture2D(2, 2, TextureFormat.ETC2_RGBA1, false);
+
+							wwwImage.LoadImageIntoTexture(imageTexture);
+
+							advertTextures.Add(imageTexture);
 
 							try {
 								File.WriteAllBytes(filePath + fileName, wwwImage.bytes);
@@ -811,8 +835,11 @@ public class IAS_Manager : MonoBehaviour
 
 			int wantedSlotCharId = ((curSlotData.lastSlotId + 1) + finalOffset + offset) % curSlotData.advert.Count; // If we use modulo here then empty ad slots would have ads but it would mean duplicate ads could appear on the backscreen together
 
+			if(advancedLogging)
+				Debug.Log("WantedSlotCharId: " + wantedSlotCharId);
+
 			// Remove this to allow duplicate ads to show on the backscreen when there's not enough ads in the slot to fill it
-			if(wantedSlotCharId - (offset-1) < 0){
+			if(GetUniqueUsableAdCount(jsonFileId, wantedSlotInt) < offset && wantedSlotCharId - (offset-1) < 0){
 				return default(char);
 			} else {
 				char wantedSlotChar = (char)(wantedSlotCharId + slotIdDecimalOffset);
@@ -875,7 +902,7 @@ public class IAS_Manager : MonoBehaviour
 			JsonFileData tempAdvertData = new JsonFileData();
 
 			try {
-				#if UNITY_5 || UNITY_2017
+				#if UNITY_5 || UNITY_2017 || UNITY_2018
 					tempAdvertData = JsonUtility.FromJson<JsonFileData>(wwwJSON.text);
 				#else
 					// Older version of Unity need the data manually mapped to the JsonFileData class
@@ -1133,7 +1160,7 @@ public class IAS_Manager : MonoBehaviour
 	{
 		if(!Instance.DoesSlotIntExist(jsonFileId, wantedSlotInt, customData)){
 			#if UNITY_EDITOR
-				Debug.LogError("(Editor Only) Attempted to refresh a blacklisted banner slot! (Slot " + wantedSlotInt + ") This will do nothing");
+				Debug.Log("(Editor Only) Attempted to refresh a banner slot which was either blacklisted or not yet ready! (Slot " + wantedSlotInt + ") This will do nothing");
 			#endif
 
 			if(Instance.advancedLogging)
