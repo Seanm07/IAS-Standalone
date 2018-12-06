@@ -99,7 +99,7 @@ public class IAS_Manager : MonoBehaviour
 		public string appVersion { get; private set; }
 	#endif
 
-	private int internalScriptVersion = 20;
+	private int internalScriptVersion = 21;
 
 	public enum Platform { Standard, TV }
 	public Platform platform = Platform.Standard;
@@ -304,7 +304,7 @@ public class IAS_Manager : MonoBehaviour
 			#endif
 		}
 
-		Debug.Log("IAS Init [" + internalScriptVersion + "] " + bundleId  + " (" + appVersion + ") - IASLog[" + (GoogleAnalytics.Instance.IASPropertyID == "UA-86209874-4" ? "PASS" : "FAIL") + "] ImpLog[" + (logAdImpressions ? "PASS" : "FAIL") + "] ClkLog[" + (logAdClicks ? "PASS" : "FAIL") + "]");
+		Debug.Log("IAS Init [" + internalScriptVersion + "] " + bundleId  + " (" + appVersion + ") - IASLog[" + (GoogleAnalytics.Instance.IASPropertyID == "UA-120537332-1" ? "PASS" : "FAIL") + "] ImpLog[" + (logAdImpressions ? "PASS" : "FAIL") + "] ClkLog[" + (logAdClicks ? "PASS" : "FAIL") + "]");
 
 		#if UNITY_ANDROID
 			// Get a list of installed packages on the device and store ones matching a filter
