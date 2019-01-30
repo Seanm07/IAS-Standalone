@@ -99,7 +99,7 @@ public class IAS_Manager : MonoBehaviour
 		public string appVersion { get; private set; }
 	#endif
 
-	private int internalScriptVersion = 21;
+	private int internalScriptVersion = 22;
 
 	public enum Platform { Standard, TV }
 	public Platform platform = Platform.Standard;
@@ -108,7 +108,7 @@ public class IAS_Manager : MonoBehaviour
 	#if UNITY_IOS
 		public string[] jsonUrls = new string[1]{"https://ias.gamepicklestudios.com/ad/3.json"};
 	#else
-	public string[] jsonUrls = new string[1]{"https://ias.gamepicklestudios.com/ad/1.json"}; // https://ads2.gumdropgames.com/ad/4.json
+		public string[] jsonUrls = new string[1]{"https://ias.gamepicklestudios.com/ad/1.json"}; // https://ads2.gumdropgames.com/ad/4.json
 	#endif
 
 	private int slotIdDecimalOffset = 97; // Decimal offset used to start our ASCII character at 'a'
@@ -682,8 +682,32 @@ public class IAS_Manager : MonoBehaviour
 									// Read the saved texture from disk
 									byte[] imageData = File.ReadAllBytes(filePath + fileName);
 
+									TextureFormat imageTextureFormat;
+
+									// Detect system compatbility for texture compression formats and use the most efficient
+									// Several IAS adverts will be in memory at once so compression is important
+									// When a compression format isn't supported the system falls into software decompression mode which means using the textures will be very heavy on performance
+									if(SystemInfo.SupportsTextureFormat(TextureFormat.PVRTC_RGBA2)){
+										// Smallest, fastest compression option but does not support ALL android GPUs
+										// However on iOS it should have full support, whereas on the otherhand iOS doesn't seem to support OpenGLES 2
+										imageTextureFormat = TextureFormat.PVRTC_RGBA2;
+									} else if(SystemInfo.SupportsTextureFormat(TextureFormat.ETC2_RGBA1)){
+										// Smallest fastest ETC2 format which supports alpha
+										imageTextureFormat = TextureFormat.ETC2_RGBA1;
+									} else if(SystemInfo.SupportsTextureFormat(TextureFormat.ETC2_RGBA8)){
+										// Last alternative for ETC2 with alpha support
+										imageTextureFormat = TextureFormat.ETC2_RGBA8;
+									} else if(SystemInfo.SupportsTextureFormat(TextureFormat.RGBA32)){
+										// Other compression formats don't seem to be supported, atleast RGBA32 should be.. right?!?
+										imageTextureFormat = TextureFormat.RGBA32;
+									} else {
+										// RGBA32 shouldALWAYS be support so we should never be here unless a crazy device with literally no alpha support exists..
+										// However if a crazy no alpha support device exists then fallback to RGB24
+										imageTextureFormat = TextureFormat.RGB24;
+									}
+
 									// We need to create a template texture, we're also setting the compression type here
-									Texture2D imageTexture = new Texture2D(2, 2, TextureFormat.ETC2_RGBA1, false);
+									Texture2D imageTexture = new Texture2D(2, 2, imageTextureFormat, false);
 
 									// Load the image data, this will also resize the texture
 									imageTexture.LoadImage(imageData);
@@ -870,7 +894,7 @@ public class IAS_Manager : MonoBehaviour
 			needToDownloadAdSlot.Add(!cachedDataLoaded);
 
 			// Download the JSON file
-			WWW wwwJSON = new WWW (jsonUrls[jsonFileId]);
+			WWW wwwJSON = new WWW (ConvertToSecureProtocol(jsonUrls[jsonFileId]));
 
 			// Wait for the JSON data to be downloaded
 			yield return wwwJSON;
