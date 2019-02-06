@@ -99,7 +99,7 @@ public class IAS_Manager : MonoBehaviour
 		public string appVersion { get; private set; }
 	#endif
 
-	private int internalScriptVersion = 22;
+	private int internalScriptVersion = 23;
 
 	public enum Platform { Standard, TV }
 	public Platform platform = Platform.Standard;
@@ -274,7 +274,7 @@ public class IAS_Manager : MonoBehaviour
 			return;
 		}
 
-		Instance = (Instance == null ? this : Instance);
+		Instance = Instance ?? this;
 
 		if(platform == Platform.TV)
 			jsonUrls[0] = "https://ias.gamepicklestudios.com/ad/6.json"; // https://ads2.gumdropgames.com/ad/8.json
@@ -420,8 +420,8 @@ public class IAS_Manager : MonoBehaviour
 
 	private string ConvertToSecureProtocol(string inputURL)
 	{
-		if(!inputURL.Contains("https://"))
-			inputURL.Replace("http://", "https://");
+		// C# internally checks the replace with indexOf anyway so no need to wrap with contains
+		inputURL = inputURL.Replace("http://", "https://");
 
 		return inputURL;
 	}
@@ -712,6 +712,9 @@ public class IAS_Manager : MonoBehaviour
 									// Load the image data, this will also resize the texture
 									imageTexture.LoadImage(imageData);
 
+									// Note! Compression doesn't work here because we can't resize an image (easily) or change the texture format (easily)
+									// It requires performance expensive operations
+
 									advertTextures.Add(imageTexture);
 								} catch(IOException e){
 									GoogleAnalytics.Instance.IASLogError("Failed to load cached file! " + e.Message);
@@ -754,8 +757,32 @@ public class IAS_Manager : MonoBehaviour
 								yield break;
 							}
 
+							TextureFormat imageTextureFormat;
+
+							// Detect system compatbility for texture compression formats and use the most efficient
+							// Several IAS adverts will be in memory at once so compression is important
+							// When a compression format isn't supported the system falls into software decompression mode which means using the textures will be very heavy on performance
+							if(SystemInfo.SupportsTextureFormat(TextureFormat.PVRTC_RGBA2)){
+								// Smallest, fastest compression option but does not support ALL android GPUs
+								// However on iOS it should have full support, whereas on the otherhand iOS doesn't seem to support OpenGLES 2
+								imageTextureFormat = TextureFormat.PVRTC_RGBA2;
+							} else if(SystemInfo.SupportsTextureFormat(TextureFormat.ETC2_RGBA1)){
+								// Smallest fastest ETC2 format which supports alpha
+								imageTextureFormat = TextureFormat.ETC2_RGBA1;
+							} else if(SystemInfo.SupportsTextureFormat(TextureFormat.ETC2_RGBA8)){
+								// Last alternative for ETC2 with alpha support
+								imageTextureFormat = TextureFormat.ETC2_RGBA8;
+							} else if(SystemInfo.SupportsTextureFormat(TextureFormat.RGBA32)){
+								// Other compression formats don't seem to be supported, atleast RGBA32 should be.. right?!?
+								imageTextureFormat = TextureFormat.RGBA32;
+							} else {
+								// RGBA32 shouldALWAYS be support so we should never be here unless a crazy device with literally no alpha support exists..
+								// However if a crazy no alpha support device exists then fallback to RGB24
+								imageTextureFormat = TextureFormat.RGB24;
+							}
+
 							// Create a template texture for the downloaded image to be loaded into, this lets us set the compression type and disable mipmaps (we disable mipmaps so the texture quality setting doesn't affect IAS ads) 
-							Texture2D imageTexture = new Texture2D(2, 2, TextureFormat.ETC2_RGBA1, false);
+							Texture2D imageTexture = new Texture2D(2, 2, imageTextureFormat, false);
 
 							wwwImage.LoadImageIntoTexture(imageTexture);
 
