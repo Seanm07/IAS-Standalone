@@ -19,6 +19,10 @@ using System.Runtime.Serialization;
 // Storage classes for IAS adverts
 [Serializable]
 public class AdJsonFileData {
+	#if UNITY_EDITOR
+		public string name;
+	#endif
+
 	public List<AdSlotData> slotInts = new List<AdSlotData>();
 
 	public AdJsonFileData(List<AdSlotData> newSlotIntsData = null)
@@ -29,6 +33,10 @@ public class AdJsonFileData {
 
 [Serializable]
 public class AdSlotData {
+	#if UNITY_EDITOR
+		public string name;
+	#endif
+
 	public int slotInt; // Number from the slotID
 
 	public List<AdData> advert = new List<AdData>();
@@ -44,6 +52,10 @@ public class AdSlotData {
 
 [Serializable]
 public class AdData {
+	#if UNITY_EDITOR
+		public string name;
+	#endif
+
 	public char slotChar; // Character from the slotID
 	public string fileName; // Name this ad file will be named as on the device
 
@@ -87,6 +99,18 @@ public class JsonSlotData {
 	public string imgurl;
 }
 
+[Serializable]
+public class AdOffsets {
+	public int slotid;
+	public int maxPreloadedAdOffset;
+
+	public AdOffsets (int inSlotId, int inMaxPreloadedAdOffset)
+	{
+		slotid = inSlotId;
+		maxPreloadedAdOffset = inMaxPreloadedAdOffset;
+	}
+}
+
 public class IAS_Manager : MonoBehaviour
 {
 	public static IAS_Manager Instance;
@@ -99,7 +123,7 @@ public class IAS_Manager : MonoBehaviour
 		public string appVersion { get; private set; }
 	#endif
 
-	private int internalScriptVersion = 23;
+	private int internalScriptVersion = 24;
 
 	public enum Platform { Standard, TV }
 	public Platform platform = Platform.Standard;
@@ -119,7 +143,7 @@ public class IAS_Manager : MonoBehaviour
 	public bool useStorageCache = true; // Should ads be downloaded to the device for use across sessions
 	public bool advancedLogging = false; // Enable this to debug the IAS with more debug logs
 
-	public int maxAdsToPreload = 3; // This will keep x ads after the active ad preloaded (useful for backscreen preloading with a value of 3)
+	public List<AdOffsets> maxOffsetAds = new List<AdOffsets>(new AdOffsets[]{ new AdOffsets(1, 3), new AdOffsets(2, 0) }); // This will keep x ads after the active ad preloaded (useful for backscreen preloading with a value of 3)
 
 	// Private to hide from developers as we never want to disable these
 	private bool logAdImpressions = true; // DO NOT DISABLE! This will affect our stats, instead talk to use about your issue
@@ -138,6 +162,12 @@ public class IAS_Manager : MonoBehaviour
 	private bool hasQuitForceSaveBeenCalled = false;
 
 	#if UNITY_EDITOR
+		[ContextMenu("Open IAS GitHub URL")]
+		private void OpenIASGithub()
+		{
+			Application.OpenURL("https://github.com/Seanm07/IAS-Standalone/");
+		}
+
 		// When true the script checks for a new version when entering play mode
 		public bool checkForLatestVersion = true;
 	
@@ -376,6 +406,10 @@ public class IAS_Manager : MonoBehaviour
 
 			AdJsonFileData curOutputJsonFile = output[jsonFileId];
 
+			#if UNITY_EDITOR
+				curOutputJsonFile.name = ConvertToSecureProtocol(jsonUrls[jsonFileId]);
+			#endif
+
 			// Slot IDs determine ad sizes and are the numbers in the slots 1a, 1b, 2a etc
 			for(int slotId=0;slotId < curInputJsonFile.slotInts.Count;slotId++)
 			{
@@ -384,6 +418,10 @@ public class IAS_Manager : MonoBehaviour
 				curOutputJsonFile.slotInts.Add(new AdSlotData());
 
 				AdSlotData curOutputSlot = curOutputJsonFile.slotInts[slotId];
+
+				#if UNITY_EDITOR
+					curOutputSlot.name = "Slot " + curInputJsonFile.slotInts[slotId].slotInt;
+				#endif
 
 				curOutputSlot.slotInt = curInputSlot.slotInt;
 				curOutputSlot.lastSlotId = curInputSlot.lastSlotId;
@@ -396,6 +434,10 @@ public class IAS_Manager : MonoBehaviour
 					curOutputSlot.advert.Add(new AdData());
 
 					AdData curOutputAdvert = curOutputSlot.advert[adId];
+
+					#if UNITY_EDITOR
+						curOutputAdvert.name = curInputJsonFile.slotInts[slotId].slotInt + curInputAdvert.slotChar.ToString();
+					#endif
 
 					curOutputAdvert.slotChar = curInputAdvert.slotChar;
 					curOutputAdvert.fileName = curInputAdvert.fileName;
@@ -636,13 +678,24 @@ public class IAS_Manager : MonoBehaviour
 		StartCoroutine(DownloadAdTexture(jsonFileId, wantedSlotInt));
 	}
 
+	private int GetMaxAdOffset(int wantedSlotId)
+	{
+		foreach(AdOffsets curOffset in maxOffsetAds)
+			if(curOffset.slotid == wantedSlotId)
+				return curOffset.maxPreloadedAdOffset;
+
+		return 0;
+	}
+
 	private IEnumerator DownloadAdTexture(int jsonFileId, int wantedSlotInt)
 	{
 		// Wait a frame just so calls to load textures aren't running instantly at app launch
 		yield return null;
 
+		int maxAdOffset = GetMaxAdOffset(wantedSlotInt);
+
 		// We only need to preload ads for slotInt 1 which is the square ads for the backscreen
-		for(int i=0;i < (wantedSlotInt == 1 ? maxAdsToPreload+1 : 1) && (i < advertData[jsonFileId].slotInts[wantedSlotInt-1].advert.Count);i++)
+		for(int i=0;i < maxAdOffset+1 && (i < advertData[jsonFileId].slotInts[wantedSlotInt-1].advert.Count);i++)
 		{
 			char slotChar = GetSlotChar(jsonFileId, wantedSlotInt, i);
 			AdData curAdData = GetAdDataByChar(jsonFileId, wantedSlotInt, slotChar);
@@ -709,6 +762,10 @@ public class IAS_Manager : MonoBehaviour
 									// We need to create a template texture, we're also setting the compression type here
 									Texture2D imageTexture = new Texture2D(2, 2, imageTextureFormat, false);
 
+									#if UNITY_EDITOR
+										imageTexture.name = wantedSlotInt + slotChar.ToString() + " - " + ConvertToSecureProtocol(jsonUrls[jsonFileId]);
+									#endif
+
 									// Load the image data, this will also resize the texture
 									imageTexture.LoadImage(imageData);
 
@@ -729,6 +786,9 @@ public class IAS_Manager : MonoBehaviour
 								curAdData.isTextureFileCached = false;
 
 								SaveIASData();
+
+								// Retry the download now that we know the cached image is missing
+								StartCoroutine(DownloadAdTexture(jsonFileId, wantedSlotInt));
 
 								yield break;
 							}
@@ -783,6 +843,10 @@ public class IAS_Manager : MonoBehaviour
 
 							// Create a template texture for the downloaded image to be loaded into, this lets us set the compression type and disable mipmaps (we disable mipmaps so the texture quality setting doesn't affect IAS ads) 
 							Texture2D imageTexture = new Texture2D(2, 2, imageTextureFormat, false);
+
+							#if UNITY_EDITOR
+								imageTexture.name = wantedSlotInt + slotChar.ToString() + " - " + ConvertToSecureProtocol(jsonUrls[jsonFileId]);
+							#endif
 
 							wwwImage.LoadImageIntoTexture(imageTexture);
 
