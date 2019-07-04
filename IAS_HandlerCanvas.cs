@@ -25,6 +25,8 @@ public class IAS_HandlerCanvas : MonoBehaviour
 		if(selfImage){
 			selfButton = gameObject.AddComponent<Button>();
 			selfButton.onClick.AddListener(OnMouseUp);
+			
+			selfImage.color = new Color(1f, 1f, 1f, 0f);
 		}
 	}
 
@@ -75,6 +77,7 @@ public class IAS_HandlerCanvas : MonoBehaviour
 			activePackageName = IAS_Manager.GetAdPackageName(jsonFileId, adTypeId, adOffset);
 
 			selfImage.sprite = Sprite.Create(adTexture, new Rect(0f, 0f, adTexture.width, adTexture.height), new Vector2(adTexture.width / 2f, adTexture.height / 2f));
+			selfImage.color = Color.white;
 			isTextureAssigned = true;
 
 			IAS_Manager.OnImpression(activePackageName, adOffset != 0); // DO NOT REMOVE THIS LINE
