@@ -6,11 +6,7 @@ using System;
 using System.Text.RegularExpressions;
 using System.Runtime.Serialization.Formatters.Binary;
 using System.Runtime.Serialization;
-
-#if !UNITY_5_3_OR_NEWER
-	// Older versions of Unity don't have the built in JSONUtility so SimpleJSON is required
-	using SimpleJSON;
-#endif
+using UnityEngine.Networking;
 
 #if UNITY_EDITOR
 	using UnityEditor;
@@ -115,7 +111,7 @@ public class IAS_Manager : MonoBehaviour
 {
 	public static IAS_Manager Instance;
 
-	#if (!UNITY_5_3_OR_NEWER) || !UNITY_ANDROID
+	#if !UNITY_5_3_OR_NEWER
 		public string bundleId = "com.example.GameNameHere";
 		public string appVersion = "1.00";
 	#else
@@ -123,18 +119,17 @@ public class IAS_Manager : MonoBehaviour
 		public string appVersion { get; private set; }
 	#endif
 
-	private int internalScriptVersion = 24;
+	private int internalScriptVersion = 25;
 
 	public enum Platform { Standard, TV }
 	public Platform platform = Platform.Standard;
 
 	// JSON URLs where the ads are grabbed from
-	#if UNITY_IOS
-		public string[] jsonUrls = new string[1]{"https://ias.gamepicklestudios.com/ad/3.json"};
-	#else
-		public string[] jsonUrls = new string[1]{"https://ias.gamepicklestudios.com/ad/1.json"}; // https://ads2.gumdropgames.com/ad/4.json
-	#endif
+	public string[] jsonUrls_ios = new string[1]{"https://ads2.gumdropgames.com/ad/9.json"};
+	public string[] jsonUrls_android = new string[1]{"https://ias.gamepicklestudios.com/ad/1.json"}; // https://ads2.gumdropgames.com/ad/4.json
 
+	private string[] jsonUrls;
+	
 	private int slotIdDecimalOffset = 97; // Decimal offset used to start our ASCII character at 'a'
 
 	// List of apps installed on the player device matching our filter
@@ -289,8 +284,9 @@ public class IAS_Manager : MonoBehaviour
 			}
 
 			if (!PlayerPrefs.HasKey ("IASTotalGamesLogged")) {
-				GoogleAnalytics.Instance.IASLogEvent("Total GamePickle games installed", installedPickleCount.ToString());
-				GoogleAnalytics.Instance.IASLogEvent("Total GumDrop games installed", installedGumdropGames.ToString());
+				FirebaseAnalyticsManager.SetUserProperty("pickle_games_installed", installedPickleCount.ToString());
+				FirebaseAnalyticsManager.SetUserProperty("gumdrop_games_installed", installedGumdropGames.ToString());
+
 				PlayerPrefs.SetInt ("IASTotalGamesLogged", 1);
 			}
 		}
@@ -305,17 +301,19 @@ public class IAS_Manager : MonoBehaviour
 		}
 
 		Instance = Instance ?? this;
-
-		if(platform == Platform.TV)
-			jsonUrls[0] = "https://ias.gamepicklestudios.com/ad/6.json"; // https://ads2.gumdropgames.com/ad/8.json
-
-		#if (UNITY_5 || UNITY_2017 || UNITY_2018) && UNITY_ANDROID
-			bundleId = Application.identifier;
-			appVersion = Application.version;
+		
+		#if UNITY_IOS
+			jsonUrls = jsonUrls_ios;
 		#else
-			if(bundleId == "com.example.GameNameHere")
-				GoogleAnalytics.Instance.IASLogError("IAS bundle identifier not set in an APK build!", false);
+			jsonUrls = jsonUrls_android;
+			
+			if(platform == Platform.TV)
+				jsonUrls[0] = "https://ias.gamepicklestudios.com/ad/6.json"; // https://ads2.gumdropgames.com/ad/8.json
 		#endif
+
+
+		bundleId = Application.identifier;
+		appVersion = Application.version;
 
 		#if UNITY_EDITOR
 			if(checkForLatestVersion)
@@ -323,18 +321,9 @@ public class IAS_Manager : MonoBehaviour
 		#endif
 	}
 
-	void Start()
+	public void Start()
 	{
-		// If the line below is giving you an error then you also need to update your GoogleAnalytics.cs, download the latest here: https://data.i6.com/IAS/GoogleAnalytics.cs
-		if(GoogleAnalytics.Instance.IASPropertyID != "UA-120537332-1"){
-			Debug.LogError("Invalid IAS property ID! Make sure the IAS Property ID is set to UA-120537332-1 in the inspector of GoogleAnalytics.cs!");
-
-			#if UNITY_EDITOR
-			EditorUtility.DisplayDialog("Invalid IAS property ID!", "Make sure the IAS Property ID is set to UA-120537332-1 in the inspector of GoogleAnalytics.cs!", "OK (Message also appears in console)");
-			#endif
-		}
-
-		Debug.Log("IAS Init [" + internalScriptVersion + "] " + bundleId  + " (" + appVersion + ") - IASLog[" + (GoogleAnalytics.Instance.IASPropertyID == "UA-120537332-1" ? "PASS" : "FAIL") + "] ImpLog[" + (logAdImpressions ? "PASS" : "FAIL") + "] ClkLog[" + (logAdClicks ? "PASS" : "FAIL") + "]");
+		Debug.Log("IAS Init [" + internalScriptVersion + "] " + bundleId  + " (" + appVersion + ") - ImpLog[" + (logAdImpressions ? "PASS" : "FAIL") + "] ClkLog[" + (logAdClicks ? "PASS" : "FAIL") + "]");
 
 		#if UNITY_ANDROID
 			// Get a list of installed packages on the device and store ones matching a filter
@@ -351,7 +340,7 @@ public class IAS_Manager : MonoBehaviour
 			RefreshActiveAdSlots();
 	}
 
-	void Update()
+	public void Update()
 	{
 		if(framesUntilIASSave > 0){
 			framesUntilIASSave--;
@@ -360,12 +349,12 @@ public class IAS_Manager : MonoBehaviour
 				SaveIASData(true);
 		}
 
-		/*#if UNITY_EDITOR
+		#if UNITY_EDITOR
 			if(Input.GetKeyDown(KeyCode.R)){
 				IAS_Manager.RefreshBanners(0, 1, true);
 				IAS_Manager.RefreshBanners(0, 2, true);
 			}
-		#endif*/
+		#endif
 	}
 	
 
@@ -500,13 +489,15 @@ public class IAS_Manager : MonoBehaviour
 				// Convert the buffer of the memory stream (the serialized object) into a base 64 string
 				base64Data = Convert.ToBase64String(memoryStream.GetBuffer());
 			} catch(FormatException e){
-				GoogleAnalytics.Instance.IASLogError("Corrupt mStream! " + e.Message, false);
+
+				FirebaseAnalyticsManager.LogError("IAS mStream corrupt - " + e.Message);
 				throw;
 			}
 
 			return base64Data;
 		} catch(SerializationException e){
-			GoogleAnalytics.Instance.IASLogError("Encode IAS Fail! " + e.Message, false);
+
+			FirebaseAnalyticsManager.LogError("IAS encode fail - " + e.Message);
 			throw;
 		}
 	}
@@ -520,11 +511,13 @@ public class IAS_Manager : MonoBehaviour
 			try {
 				return (List<AdJsonFileData>)binaryData.Deserialize(memoryStream);
 			} catch(SerializationException e){
-				GoogleAnalytics.Instance.IASLogError("Decode Fail! " + e.Message, false);
+
+				FirebaseAnalyticsManager.LogError("IAS decode fail - " + e.Message);
 				throw;
 			}
 		} catch(FormatException e){
-			GoogleAnalytics.Instance.IASLogError("Corrupt IAS Data! " + e.Message);
+
+			FirebaseAnalyticsManager.LogError("IAS data corrupt - " + e.Message);
 			throw;
 		}
 	}
@@ -532,9 +525,9 @@ public class IAS_Manager : MonoBehaviour
 	private void SaveIASData(bool forceSave = false)
 	{
 		if(!forceSave){
-			// If the save function is called multiple times within 15 frames it'll just reset the timer before the save happens
+			// If the save function is called multiple times within 200 frames it'll just reset the timer before the save happens
 			// Unless forceSave is true which either means the user to quitting the app or framesUntilIASSave is 0
-			framesUntilIASSave = 15;
+			framesUntilIASSave = 200;
 			return;
 		} else {
 			framesUntilIASSave = -1;
@@ -708,7 +701,7 @@ public class IAS_Manager : MonoBehaviour
 
 			}
 
-			if(curAdData != null && !curAdData.isDownloading){
+			if(curAdData != null){// && !curAdData.isDownloading){
 				// Download the texture for the newly selected IAS advert
 				// Only bother re-downloading the image if the timestamp has changed or the texture isn't marked as ready
 				if(!curAdData.isTextureReady || curAdData.lastUpdated < curAdData.newUpdateTime){
@@ -724,13 +717,20 @@ public class IAS_Manager : MonoBehaviour
 						curAdData.lastUpdated = curAdData.newUpdateTime;
 						curAdData.isDownloading = true;
 
+						yield return null;
+
 						// Check to see if we have this advert locally cached
 						if(curAdData.isTextureFileCached){
-							//if(advancedLogging)
-							//	Debug.Log("Starting ad download of " + curAdData.packageName + " " + wantedSlotInt + "" + slotChar + " (CACHED)");
+							if(advancedLogging)
+								Debug.Log("Starting ad download of " + curAdData.packageName + " " + wantedSlotInt + "" + slotChar + " (CACHED)");
 
 							// Make sure the cache file actually exists (unexpected write fails or manual deletion)
 							if(File.Exists(filePath + fileName)){
+								if(advancedLogging)
+									Debug.Log("Cached file exists for " + wantedSlotInt + "" + slotChar);
+								
+								yield return null;
+
 								try {
 									// Read the saved texture from disk
 									byte[] imageData = File.ReadAllBytes(filePath + fileName);
@@ -773,8 +773,14 @@ public class IAS_Manager : MonoBehaviour
 									// It requires performance expensive operations
 
 									advertTextures.Add(imageTexture);
+									
+									if(advancedLogging)
+										Debug.Log("Ad texture added for" + wantedSlotInt + "" + slotChar);
 								} catch(IOException e){
-									GoogleAnalytics.Instance.IASLogError("Failed to load cached file! " + e.Message);
+									if(advancedLogging)
+										Debug.Log("IAS Failed to load cached file " + wantedSlotInt + "" + slotChar);
+									
+									FirebaseAnalyticsManager.LogError("IAS failed to load cached file - " + e.Message);
 									curAdData.isTextureFileCached = false;
 
 									SaveIASData();
@@ -782,10 +788,12 @@ public class IAS_Manager : MonoBehaviour
 									yield break;
 								}
 							} else {
-								GoogleAnalytics.Instance.IASLogError("Saved cached image was missing!");
+								FirebaseAnalyticsManager.LogError("IAS saved cached image missing!");
 								curAdData.isTextureFileCached = false;
 
 								SaveIASData();
+
+								yield return null;
 
 								// Retry the download now that we know the cached image is missing
 								StartCoroutine(DownloadAdTexture(jsonFileId, wantedSlotInt));
@@ -793,78 +801,69 @@ public class IAS_Manager : MonoBehaviour
 								yield break;
 							}
 						} else {
-							//if(advancedLogging)
-							//	Debug.Log("Starting ad download of " + curAdData.packageName + " " + wantedSlotInt + "" + slotChar + " (NOT CACHED)");
+							if(advancedLogging)
+								Debug.Log("Starting ad download of " + curAdData.packageName + " " + wantedSlotInt + "" + slotChar + " (NOT CACHED)");
 
 							// The advert is not yet locally cached, 
-							WWW wwwImage = new WWW(curAdData.imgUrl);
+							UnityWebRequest imageRequest = WebRequestTexture(curAdData.imgUrl);
 
-							// Wait for the image data to be downloaded
-							yield return wwwImage;
+							DownloadHandlerTexture imageRequestDownloadHandler = (DownloadHandlerTexture)imageRequest.downloadHandler;
+
+							// Wait for the request to complete
+							yield return imageRequest.SendWebRequest();
 
 							// Need to re-grab curAdData just incase it has been overwritten
 							curAdData = GetAdDataByChar(jsonFileId, wantedSlotInt, slotChar);
 
 							// Check for any errors
-							if(!string.IsNullOrEmpty(wwwImage.error)){
-								GoogleAnalytics.Instance.IASLogError("Image download error! " + wwwImage.error);
-								yield break;
-							} else if(wwwImage.text.Contains("There was an error")){
-								GoogleAnalytics.Instance.IASLogError("Image download error! Serverside system error!");
-								yield break;
-							} else if(string.IsNullOrEmpty(wwwImage.text)){
-								GoogleAnalytics.Instance.IASLogError("Image download error! Empty result!");
+							if(!string.IsNullOrEmpty(imageRequest.error)){
+								FirebaseAnalyticsManager.LogError("IAS image download error - " + imageRequest.error);
 								yield break;
 							}
+							
+							// Interacting with the .text of an image is very slow, with the new Unity web request system these checks aren't even needed anymore anyway
+							/*else if(imageRequestDownloadHandler.text.Contains("There was an error")){
 
-							TextureFormat imageTextureFormat;
+								FirebaseAnalyticsManager.LogError("IAS image download error - serverside system error");
+								yield break;
+							} else if(string.IsNullOrEmpty(imageRequestDownloadHandler.text)){
 
-							// Detect system compatbility for texture compression formats and use the most efficient
-							// Several IAS adverts will be in memory at once so compression is important
-							// When a compression format isn't supported the system falls into software decompression mode which means using the textures will be very heavy on performance
-							if(SystemInfo.SupportsTextureFormat(TextureFormat.PVRTC_RGBA2)){
-								// Smallest, fastest compression option but does not support ALL android GPUs
-								// However on iOS it should have full support, whereas on the otherhand iOS doesn't seem to support OpenGLES 2
-								imageTextureFormat = TextureFormat.PVRTC_RGBA2;
-							} else if(SystemInfo.SupportsTextureFormat(TextureFormat.ETC2_RGBA1)){
-								// Smallest fastest ETC2 format which supports alpha
-								imageTextureFormat = TextureFormat.ETC2_RGBA1;
-							} else if(SystemInfo.SupportsTextureFormat(TextureFormat.ETC2_RGBA8)){
-								// Last alternative for ETC2 with alpha support
-								imageTextureFormat = TextureFormat.ETC2_RGBA8;
-							} else if(SystemInfo.SupportsTextureFormat(TextureFormat.RGBA32)){
-								// Other compression formats don't seem to be supported, atleast RGBA32 should be.. right?!?
-								imageTextureFormat = TextureFormat.RGBA32;
-							} else {
-								// RGBA32 shouldALWAYS be support so we should never be here unless a crazy device with literally no alpha support exists..
-								// However if a crazy no alpha support device exists then fallback to RGB24
-								imageTextureFormat = TextureFormat.RGB24;
-							}
+								FirebaseAnalyticsManager.LogError("IAS image download error - empty result");
+								yield break;
+							}*/
 
 							// Create a template texture for the downloaded image to be loaded into, this lets us set the compression type and disable mipmaps (we disable mipmaps so the texture quality setting doesn't affect IAS ads) 
-							Texture2D imageTexture = new Texture2D(2, 2, imageTextureFormat, false);
+							Texture2D imageTexture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
 
 							#if UNITY_EDITOR
 								imageTexture.name = wantedSlotInt + slotChar.ToString() + " - " + ConvertToSecureProtocol(jsonUrls[jsonFileId]);
 							#endif
 
-							wwwImage.LoadImageIntoTexture(imageTexture);
+							yield return null;
+
+							imageTexture = imageRequestDownloadHandler.texture;
+
+							yield return null;
 
 							advertTextures.Add(imageTexture);
 
 							try {
-								File.WriteAllBytes(filePath + fileName, wwwImage.bytes);
+								File.WriteAllBytes(filePath + fileName, imageRequestDownloadHandler.data);
 								curAdData.isTextureFileCached = true;
 
 								SaveIASData();
 							} catch(IOException e){
-								GoogleAnalytics.Instance.IASLogError("Failed to create cache file! " + e.Message);
+								FirebaseAnalyticsManager.LogError("IAS failed to create cache file - " + e.Message);
 								throw;
 							}
 
-							// Dispose of the wwwImage data as soon as we no longer need it (clear it from memory)
-							wwwImage.Dispose();
+							// Dispose of the imageRequest data as soon as we no longer need it (clear it from memory)
+							imageRequestDownloadHandler.Dispose();
+							imageRequest.Dispose();
 						}
+						
+						if(advancedLogging)
+							Debug.Log("IAS done for " + wantedSlotInt + "" + slotChar);
 
 						curAdData.adTextureId = advertTextures.Count - 1;
 						curAdData.isTextureReady = true;
@@ -872,8 +871,10 @@ public class IAS_Manager : MonoBehaviour
 					}
 				}
 
-				//if(advancedLogging)
-				//	Debug.Log("Finished ad download of " + curAdData.packageName);
+				if(advancedLogging)
+					Debug.Log("Finished ad download of " + curAdData.packageName);
+
+				yield return null;
 
 				if(OnIASImageDownloaded != null)
 					OnIASImageDownloaded.Invoke();
@@ -884,6 +885,17 @@ public class IAS_Manager : MonoBehaviour
 		}
 	}
 
+	public static UnityWebRequest WebRequestTexture(string url)
+	{
+		return UnityWebRequestTexture.GetTexture(url);
+	}
+
+	public static UnityWebRequest WebRequestString(string url)
+	{
+		return UnityWebRequest.Get(url);
+	}
+
+	
 	private int GetUniqueUsableAdCount(int jsonFileId, int wantedSlotInt)
 	{
 		List<AdData> allSlotAds = advertData[jsonFileId].slotInts[wantedSlotInt-1].advert;
@@ -892,7 +904,7 @@ public class IAS_Manager : MonoBehaviour
 
 		for(int i=0;i < allSlotAds.Count;i++)
 		{
-			if(!allSlotAds[i].isSelf && allSlotAds[i].isActive){
+			if(!allSlotAds[i].isSelf && allSlotAds[i].isActive) {
 				bool packageNameAlreadyProcessed = false;
 
 				foreach(string package in processedPackageNames){
@@ -900,8 +912,9 @@ public class IAS_Manager : MonoBehaviour
 						packageNameAlreadyProcessed = true;
 				}
 
-				if(!packageNameAlreadyProcessed)
+				if (!packageNameAlreadyProcessed) {
 					processedPackageNames.Add(allSlotAds[i].packageName);
+				}
 			}
 		}
 
@@ -955,6 +968,7 @@ public class IAS_Manager : MonoBehaviour
 
 			// Remove this to allow duplicate ads to show on the backscreen when there's not enough ads in the slot to fill it
 			if(GetUniqueUsableAdCount(jsonFileId, wantedSlotInt) < offset && wantedSlotCharId - (offset-1) < 0){
+			
 				return default(char);
 			} else {
 				char wantedSlotChar = (char)(wantedSlotCharId + slotIdDecimalOffset);
@@ -968,9 +982,9 @@ public class IAS_Manager : MonoBehaviour
 
 	private IEnumerator DownloadIASData(bool cachedDataLoaded = false)
 	{
-		// Wait for an active internet connection
-		if(Application.internetReachability == NetworkReachability.NotReachable)
-			yield return null;
+		// Cancel the ad download if there's no internet connection
+		if (Application.internetReachability == NetworkReachability.NotReachable)
+			yield break;
 
 		if(advancedLogging)
 			Debug.Log("IAS downloading data..");
@@ -985,28 +999,30 @@ public class IAS_Manager : MonoBehaviour
 			needToDownloadAdSlot.Add(!cachedDataLoaded);
 
 			// Download the JSON file
-			WWW wwwJSON = new WWW (ConvertToSecureProtocol(jsonUrls[jsonFileId]));
+			UnityWebRequest jsonRequest = WebRequestString(ConvertToSecureProtocol(jsonUrls[jsonFileId]));
 
-			// Wait for the JSON data to be downloaded
-			yield return wwwJSON;
+			DownloadHandler jsonRequestDownloadHandler = jsonRequest.downloadHandler;
+
+			// Wait for the request to complete
+			yield return jsonRequest.SendWebRequest();
 
 			// Check for any errors
-			if(!string.IsNullOrEmpty(wwwJSON.error)){
-				GoogleAnalytics.Instance.IASLogError("JSON download error! " + wwwJSON.error, false);
+			if(!string.IsNullOrEmpty(jsonRequest.error)){
+				FirebaseAnalyticsManager.LogError("IAS JSON download error - " + jsonRequest.error);
 
 				if(advancedLogging)
-					Debug.LogError("JSON download error! " + wwwJSON.error);
+					Debug.LogError("JSON download error! " + jsonRequest.error);
 
 				yield break;
-			} else if(wwwJSON.text.Contains("There was an error")){
-				GoogleAnalytics.Instance.IASLogError("JSON download error! Serverside system error!", false);
+			} else if(jsonRequestDownloadHandler.text.Contains("There was an error")) {
+				FirebaseAnalyticsManager.LogError("IAS JSON download error! Serverside system error!");
 
 				if(advancedLogging)
 					Debug.LogError("JSON download error! Serverside system error!");
 
 				yield break;
-			} else if(string.IsNullOrEmpty(wwwJSON.text)){
-				GoogleAnalytics.Instance.IASLogError("JSON download error! Empty JSON!", false);
+			} else if(string.IsNullOrEmpty(jsonRequestDownloadHandler.text)){
+				FirebaseAnalyticsManager.LogError("IAS JSON download error! Empty JSON!");
 
 				if(advancedLogging)
 					Debug.LogError("JSON download error! Empty JSON!");
@@ -1017,31 +1033,11 @@ public class IAS_Manager : MonoBehaviour
 			JsonFileData tempAdvertData = new JsonFileData();
 
 			try {
-				#if UNITY_5 || UNITY_2017 || UNITY_2018
-					tempAdvertData = JsonUtility.FromJson<JsonFileData>(wwwJSON.text);
-				#else
-					// Older version of Unity need the data manually mapped to the JsonFileData class
-					tempAdvertData.slots = new List<JsonSlotData>();
-					JSONNode jsonData = JSON.Parse(wwwJSON.text);
 
-					for(int slotId=0;slotId < jsonData["slots"].AsArray.Count;slotId++)
-					{
-						JSONNode curSlot = jsonData["slots"].AsArray[slotId];
-						JsonSlotData curSlotData = new JsonSlotData();
+				tempAdvertData = JsonUtility.FromJson<JsonFileData>(jsonRequestDownloadHandler.text);
 
-						curSlotData.slotid = curSlot["slotid"];
-						curSlotData.updatetime = long.Parse(curSlot["updatetime"]);
-
-						curSlotData.active = curSlot["active"].AsBool;
-
-						curSlotData.adurl = curSlot["adurl"];
-						curSlotData.imgurl = curSlot["imgurl"];
-
-						tempAdvertData.slots.Add(curSlotData);
-					}
-				#endif
 			} catch(ArgumentException e){
-				GoogleAnalytics.Instance.IASLogError("JSON data invalid!" + e.Message, false);
+				FirebaseAnalyticsManager.LogError("IAS JSON data invalid - " + e.Message);
 
 				if(advancedLogging)
 					Debug.LogError("JSON data invalid!" + e.Message);
@@ -1049,11 +1045,13 @@ public class IAS_Manager : MonoBehaviour
 				yield break;
 			}
 
-			// Dispose of the wwwJSON data (clear it from memory)
-			wwwJSON.Dispose();
+			// Dispose of the json request data (clear it from memory)
+			jsonRequestDownloadHandler.Dispose();
+			jsonRequest.Dispose();
 
 			if(tempAdvertData == null){
-				GoogleAnalytics.Instance.IASLogError("Temp advert data was null!", false);
+
+				FirebaseAnalyticsManager.LogError("IAS temp advert data null!");
 
 				if(advancedLogging)
 					Debug.LogError("Temp advert data was null!");
@@ -1062,7 +1060,8 @@ public class IAS_Manager : MonoBehaviour
 			}
 
 			if(tempAdvertData.slots.Count <= 0){
-				GoogleAnalytics.Instance.IASLogError("Temp advert data has no slots!", false);
+
+				FirebaseAnalyticsManager.LogError("IAS temp advert data no slots!");
 
 				if(advancedLogging)
 					Debug.LogError("Temp advert data has no slots!");
@@ -1086,7 +1085,7 @@ public class IAS_Manager : MonoBehaviour
 
 					// Attempt to extract the slot int from the slot id
 					if(!int.TryParse(Regex.Replace(curSlot.slotid, "[^0-9]", ""), out slotInt)){
-						GoogleAnalytics.Instance.IASLogError("Failed to parse slot int from '" + curSlot.slotid + "'");
+						FirebaseAnalyticsManager.LogError("IAS failed to parse slot int from '" + curSlot.slotid + "'");
 
 						if(advancedLogging)
 							Debug.LogError("Failed to parse slot int from '" + curSlot.slotid + "'");
@@ -1096,7 +1095,7 @@ public class IAS_Manager : MonoBehaviour
 
 					// Attempt to extract the slot character from the slot id
 					if(!char.TryParse(Regex.Replace(curSlot.slotid, "[^a-z]", ""), out slotChar)){
-						GoogleAnalytics.Instance.IASLogError("Failed to parse slot char from '" + curSlot.slotid + "'");
+						FirebaseAnalyticsManager.LogError("IAS failed to parse slot char from '" + curSlot.slotid + "'");
 
 						if(advancedLogging)
 							Debug.LogError("Failed to parse slot char from '" + curSlot.slotid + "'");
@@ -1112,7 +1111,7 @@ public class IAS_Manager : MonoBehaviour
 					int slotDataIndex = GetSlotIndex(jsonFileId, slotInt, newAdvertData);
 
 					if(slotDataIndex < 0){
-						GoogleAnalytics.Instance.IASLogError("Failed to get slotDataIndex!");
+						FirebaseAnalyticsManager.LogError("IAS failed to get slotDataIndex");
 
 						if(advancedLogging)
 							Debug.LogError("Failed to get slotDataIndex!");
@@ -1133,8 +1132,8 @@ public class IAS_Manager : MonoBehaviour
 
 					int slotAdIndex = GetAdIndex(jsonFileId, slotInt, slotChar, newAdvertData);
 
-					if(slotAdIndex < 0){
-						GoogleAnalytics.Instance.IASLogError("Failed to get slotAdIndex! Could not find " + slotInt + ", " + slotChar.ToString());
+					if(slotAdIndex < 0) {
+						FirebaseAnalyticsManager.LogError("IAS failed to get slotAdIndex, could not find " + slotInt + ", " + slotChar.ToString());
 
 						if(advancedLogging)
 							Debug.LogError("Failed to get slotAdIndex! Could not find " + slotInt + ", " + slotChar.ToString());
@@ -1166,7 +1165,7 @@ public class IAS_Manager : MonoBehaviour
 					curAdData.isInstalled = IsPackageInstalled(packageName);
 					curAdData.adUrl = curSlot.adurl;
 					curAdData.packageName = packageName;
-
+					
 					curAdData.imgUrl = curSlot.imgurl;
 
 					// Check if the cached active data needs the ad textures reloading
@@ -1251,9 +1250,14 @@ public class IAS_Manager : MonoBehaviour
 	/// <param name="isBackscreen">Is this a backscreen advert</param>
 	public static void OnImpression(string packageName, bool isBackscreen)
 	{
-		if(Instance.logAdImpressions)
-			GoogleAnalytics.Instance.IASLogEvent("IAS Views", Instance.bundleId + " " + (isBackscreen ? "(backscreen)" : "(main)"), packageName);
+		if (Instance.logAdImpressions) {
+			string selfBundle = Instance.bundleId.Length > 27 ? Instance.bundleId.Substring(0, 27) : Instance.bundleId;
+			string adBundle = packageName.Length > 40 ? packageName.Substring(0, 40) : packageName;
+			
+			FirebaseAnalyticsManager.LogEvent("ias_impression", selfBundle + (isBackscreen ? "(backscreen)" : "(main)"), adBundle);
+		}
 	}
+	
 
 	/// <summary>
 	/// Call this for every IAS advert the player clicks
@@ -1262,8 +1266,12 @@ public class IAS_Manager : MonoBehaviour
 	/// <param name="isBackscreen">Is this a backscreen advert</param>
 	public static void OnClick(string packageName, bool isBackscreen)
 	{
-		if(Instance.logAdClicks)
-			GoogleAnalytics.Instance.IASLogEvent("IAS Clicks", Instance.bundleId + " " + (isBackscreen ? "(backscreen)" : "(main)"), packageName);
+		if (Instance.logAdClicks) {
+			string selfBundle = Instance.bundleId.Length > 27 ? Instance.bundleId.Substring(0, 27) : Instance.bundleId;
+			string adBundle = packageName.Length > 40 ? packageName.Substring(0, 40) : packageName;
+			
+			FirebaseAnalyticsManager.LogEvent("ias_click", selfBundle + (isBackscreen ? "(backscreen)" : "(main)"), adBundle);
+		}
 	}
 
 	/// <summary>
@@ -1302,8 +1310,9 @@ public class IAS_Manager : MonoBehaviour
 	/// <returns><c>true</c> if is ad ready the specified jsonFileId wantedSlotInt; otherwise, <c>false</c>.</returns>
 	/// <param name="jsonFileId">JSON file ID</param>
 	/// <param name="wantedSlotInt">Slot int</param>
-	public static bool IsAdReady(int jsonFileId, int wantedSlotInt, int offset = 0)
-	{
+	public static bool IsAdReady(int jsonFileId, int wantedSlotInt, int offset = 0) {
+		if (!Instance) return false;
+		
 		AdData returnValue = Instance.GetAdData(jsonFileId, wantedSlotInt, offset);
 
 		if(returnValue != null){
@@ -1321,6 +1330,8 @@ public class IAS_Manager : MonoBehaviour
 	/// <param name="wantedSlotInt">Slot int</param>
 	public static string GetAdURL(int jsonFileId, int wantedSlotInt, int offset = 0)
 	{
+		if (!Instance) return string.Empty;
+		
 		AdData returnValue = Instance.GetAdData(jsonFileId, wantedSlotInt, offset);
 
 		if(returnValue != null){
@@ -1338,6 +1349,8 @@ public class IAS_Manager : MonoBehaviour
 	/// <param name="wantedSlotInt">Slot int</param>
 	public static string GetAdPackageName(int jsonFileId, int wantedSlotInt, int offset = 0)
 	{
+		if (!Instance) return string.Empty;
+		
 		AdData returnValue = Instance.GetAdData(jsonFileId, wantedSlotInt, offset);
 
 		if(returnValue != null){
@@ -1355,6 +1368,8 @@ public class IAS_Manager : MonoBehaviour
 	/// <param name="wantedSlotInt">Slot int</param>
 	public static Texture GetAdTexture(int jsonFileId, int wantedSlotInt, int offset = 0)
 	{
+		if (!Instance) return null;
+		
 		AdData returnValue = Instance.GetAdData(jsonFileId, wantedSlotInt, offset);
 
 		if(returnValue != null){
