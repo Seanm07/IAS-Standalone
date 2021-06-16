@@ -1,31 +1,19 @@
 # IAS Manager Documentation
 
-## January 22nd 2018 Update Notes
-Once you've updated IAS_Manager.cs you'll also need to update your IAS Handler script too, you can either re-download a handler from the github page or add adOffset != 0 as a second parameter to the OnImpression(..) and OnClick(..) function calls from the handler script.
-
-You'll then finally also need to update GoogleAnalytics.cs for this just simply replace the script in your project with this one: http://data.i6.com/IAS/GoogleAnalytics.cs
+## Download the Pickle plugins!
+Our pickle plugins are needed to use the IAS scripts [Download the latest Pickle Plugins here](https://github.com/Seanm07/pickle-plugin/releases/latest)
 
 ## Pre-notes
-The new IAS script now supports multiple json urls instead of a json file for the main and backscreen banners, generally you'll only be using 1 json file but in some cases multiple may be used. You interact with each json file using the order of assignment in the inspector for the jsonUrls array e.g the first json file is 0 then 1 then 2 etc.
-
 wantedSlotInt variables refer to the advert type, so 1 is square, 2 is tall - this isn't an enum so we can possibly add more sizes in future if they're needed but really you'll only be referring to 1 and 2
 
 When refreshing adverts make sure to only refresh what you need, e.g don't refresh square AND tall if only tall is going to be visible after the refresh call; the new system is built so ads aren't downloaded or loaded into memory when they don't need to be. 
 
 Note! If you're not using a certain size banner it's still best to blacklist them (see blacklisting step in setup section) because 1 ad of all sizes is still preloaded ready to be displayed AND restarting the app jumps ads to the next in queue so eventually all ads would be on the disk.
 
-## Prerequisites
-Make sure your project is already setup to use the GoogleAnalytics V4 plugin. [You can read more information about this in our developers doc here!](https://docs.google.com/document/d/1HxqJY56W8jzDABvCooL6gsfMjP4uLd2E5Dy6FLXGnbA/edit#heading=h.4d3y7jvs7802)
-
 ## IAS Plugin Setup
-- Download our java plugin [Pickle_GetPackages.jar](http://data.i6.com/IAS/GamePickle/Pickle_GetPackages.jar) 
-- Put Pickle_GetPackages.jar inside **/Plugins/Android/** ***(create the folders if they don't exist)***
-- Download [JarLoader.cs](http://data.i6.com/IAS/GamePickle/JarLoader.cs) ***(Script which interacts with the Java plugin)***
+- Download our pickle plugins [PicklePlugins.zip](https://github.com/Seanm07/pickle-plugin/releases/latest) 
+- Extract the files into your Assets folder
 - Attach JarLoader.cs to a persistent gameobject in your initial scene ***(put this on a gameobject which is never destroyed)***
-
-**Unity 4 / early 5 only**
-- If you are using Unity 4 or an early version of Unity 5 download [SimpleJSON.cs](http://pastebin.com/38gyz4mB) ***(Plugin which parses the JSON data, later versions of Unity have a built in JSON parser)***
-- Put SimpleJSON.cs inside **/Plugins/**
 
 ## IAS Manager Script Setup
 - Import IAS_Manager.cs
