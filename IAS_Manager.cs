@@ -119,7 +119,7 @@ public class IAS_Manager : MonoBehaviour
 		public string appVersion { get; private set; }
 	#endif
 
-	private int internalScriptVersion = 25;
+	private int internalScriptVersion = 27;
 
 	public enum Platform { Standard, TV }
 	public Platform platform = Platform.Standard;
