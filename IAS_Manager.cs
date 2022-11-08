@@ -7,7 +7,7 @@ using System.Text.RegularExpressions;
 using System.Runtime.Serialization.Formatters.Binary;
 using System.Runtime.Serialization;
 using UnityEngine.Networking;
-
+using UnityEngine.Purchasing;
 #if UNITY_EDITOR
 	using UnityEditor;
 #endif
@@ -111,22 +111,13 @@ public class IAS_Manager : MonoBehaviour
 {
 	public static IAS_Manager Instance;
 
-	#if !UNITY_5_3_OR_NEWER
-		public string bundleId = "com.example.GameNameHere";
-		public string appVersion = "1.00";
-	#else
-		public string bundleId { get; private set; }
-		public string appVersion { get; private set; }
-	#endif
+	public string bundleId { get; private set; }
+	public string appVersion { get; private set; }
 
-	private int internalScriptVersion = 27;
+	private int internalScriptVersion = 31;
 
 	public enum Platform { Standard, TV }
 	public Platform platform = Platform.Standard;
-
-	// JSON URLs where the ads are grabbed from
-	public string[] jsonUrls_ios = new string[1]{"https://ads2.gumdropgames.com/ad/9.json"};
-	public string[] jsonUrls_android = new string[1]{"https://ias.gamepicklestudios.com/ad/1.json"}; // https://ads2.gumdropgames.com/ad/4.json
 
 	private string[] jsonUrls;
 	
@@ -156,6 +147,9 @@ public class IAS_Manager : MonoBehaviour
 	// (is also set back to false if the user comes back to the app from being minimized)
 	private bool hasQuitForceSaveBeenCalled = false;
 
+	// Most app stores do not want us linking to other stores so any stores we don't support IAS on just don't show IAS ads
+	public bool storeSupportsIAS { get; private set; }
+	
 	#if UNITY_EDITOR
 		[ContextMenu("Open IAS GitHub URL")]
 		private void OpenIASGithub()
@@ -301,16 +295,6 @@ public class IAS_Manager : MonoBehaviour
 		}
 
 		Instance = Instance ?? this;
-		
-		#if UNITY_IOS
-			jsonUrls = jsonUrls_ios;
-		#else
-			jsonUrls = jsonUrls_android;
-			
-			if(platform == Platform.TV)
-				jsonUrls[0] = "https://ias.gamepicklestudios.com/ad/6.json"; // https://ads2.gumdropgames.com/ad/8.json
-		#endif
-
 
 		bundleId = Application.identifier;
 		appVersion = Application.version;
@@ -319,29 +303,116 @@ public class IAS_Manager : MonoBehaviour
 			if(checkForLatestVersion)
 				StartCoroutine(CheckIASVersion());
 		#endif
+		
+		CrossPlatformManager.OnStoreInitializeFinished += OnStoreInitializeFinished;
 	}
 
-	public void Start()
-	{
-		Debug.Log("IAS Init [" + internalScriptVersion + "] " + bundleId  + " (" + appVersion + ") - ImpLog[" + (logAdImpressions ? "PASS" : "FAIL") + "] ClkLog[" + (logAdClicks ? "PASS" : "FAIL") + "]");
+	// Add a few frames of delay so we're not initializing alongside other scripts
+	private void OnStoreInitializeFinished() {
+		StartCoroutine(DoStoreInitialization());
+	}
 
-		#if UNITY_ANDROID
+	private IEnumerator DoStoreInitialization() {
+		for (int i = 0; i < 20; i++)
+			yield return null;
+
+		StoreInitializeFinished();
+	}
+
+	public void StoreInitializeFinished() {
+		CrossPlatformManager.OnStoreInitializeFinished -= StoreInitializeFinished;
+		
+		AppStore store = CrossPlatformManager.GetActiveStore();
+
+		// The editor will either act like the apple app store or google play store depending on ios or android build target
+		if (store == AppStore.fake) {
+			#if UNITY_IOS
+				store = AppStore.AppleAppStore;
+			#else
+				store = AppStore.GooglePlay;
+			#endif
+		}
+		
+		switch (store) {
+			case AppStore.AppleAppStore:
+			case AppStore.MacAppStore:
+				bool isGameShark = bundleId.Contains("com.pickle.");
+
+				if (isGameShark) {
+					jsonUrls = new[] {"https://ias.gamepicklestudios.com/ad/3.json"};
+				} else {
+					jsonUrls = new[] {"https://ads2.gumdropgames.com/ad/9.json"};
+				}
+
+				break;
+			
+			case AppStore.AmazonAppStore: 
+				jsonUrls = new []{"https://ias.gamepicklestudios.com/ad/2.json"};
+				break;
+			
+			case AppStore.UDP:
+				switch (CrossPlatformManager.GetActiveUDPStore()) {
+					case UDPStore.SAMSUNGGALAXYSTORE: jsonUrls = new[] {"https://ias.gamepicklestudios.com/ad/11.json"}; break;
+					case UDPStore.ONESTORE: jsonUrls = new[] {"https://ias.gamepicklestudios.com/ad/12.json"}; break;
+					case UDPStore.XIAOMI: case UDPStore.XIAOMISTORE: case UDPStore.XIAOMISTORECN: jsonUrls = new[] {"https://ias.gamepicklestudios.com/ad/13.json"}; break;
+					case UDPStore.HUAWEI: jsonUrls = new[] {"https://ias.gamepicklestudios.com/ad/14.json"}; break;
+					case UDPStore.QOOAPP: jsonUrls = new[] {"https://ias.gamepicklestudios.com/ad/15.json"}; break;
+					case UDPStore.JIO: case UDPStore.JIOGAMESSTORE: jsonUrls = new[] {"https://ias.gamepicklestudios.com/ad/16.json"}; break;
+					case UDPStore.UPTODOWN: jsonUrls = new[] {"https://ias.gamepicklestudios.com/ad/17.json"}; break;
+					case UDPStore.LEGIONREALM: jsonUrls = new[] {"https://ias.gamepicklestudios.com/ad/18.json"}; break;
+					case UDPStore.APPTUTTI: jsonUrls = new[] {"https://ias.gamepicklestudios.com/ad/19.json"}; break;
+					case UDPStore.SHAREIT: jsonUrls = new[] {"https://ias.gamepicklestudios.com/ad/20.json"}; break;
+					
+					// Other stores fallback to using the Google Play IAS slot
+					default: jsonUrls = new string[0]; break;
+				}
+				break;
+			
+			case AppStore.GooglePlay:
+				bool isGamePickle = bundleId.Contains("com.pickle.");
+
+				if (isGamePickle) {
+					// (Game Pickle) 1 = Google Play Standard / 6 = Google Play Android TV
+					jsonUrls = new[] {"https://ias.gamepicklestudios.com/ad/" + (platform == Platform.Standard ? "1" : "6") + ".json"};
+				} else {
+					// (Gumdrop Games) 4 = Google Play Standard / 8 = Google Play Android TV
+					jsonUrls = new[] {"https://ads2.gumdropgames.com/ad/" + (platform == Platform.Standard ? "4" : "8") + ".json"};
+				}
+				break;
+			
+			// Other stores fallback to no IAS ads as most stores do not allow linking to other stores
+			default: jsonUrls = new string[0]; break;
+		}
+
+		if (jsonUrls.Length > 0) {
+			storeSupportsIAS = true;
+			
+			Debug.Log("IAS Init [" + internalScriptVersion + "] " + bundleId + " (" + appVersion + ") (" + jsonUrls[0].Substring(jsonUrls[0].LastIndexOf('/') + 1) + ") - ImpLog[" + (logAdImpressions ? "PASS" : "FAIL") + "] ClkLog[" + (logAdClicks ? "PASS" : "FAIL") + "]");
+			
+#if UNITY_ANDROID
 			// Get a list of installed packages on the device and store ones matching a filter
 			UpdateInstalledPackages();
-		#endif
+#endif
+			
+			bool cachedIASDataLoaded = LoadIASData();
 
-		bool cachedIASDataLoaded = LoadIASData();
+			StartCoroutine(DownloadIASData(cachedIASDataLoaded));
 
-		StartCoroutine(DownloadIASData(cachedIASDataLoaded));
-
-		// If there was some cached IAS data available refresh the ads now
-		// The ads will also be refreshed once the IAS data reloads if any ad timestamps have changed
-		if(cachedIASDataLoaded)
-			RefreshActiveAdSlots();
+			// If there was some cached IAS data available refresh the ads now
+			// The ads will also be refreshed once the IAS data reloads if any ad timestamps have changed
+			if(cachedIASDataLoaded)
+				RefreshActiveAdSlots();
+		} else {
+			storeSupportsIAS = false;
+			
+			Debug.Log("IAS not supported on the app store");
+		}
 	}
 
-	public void Update()
-	{
+	public void Update() {
+		if (!storeSupportsIAS)
+			return;
+		
 		if(framesUntilIASSave > 0){
 			framesUntilIASSave--;
 
@@ -351,8 +422,8 @@ public class IAS_Manager : MonoBehaviour
 
 		#if UNITY_EDITOR
 			if(Input.GetKeyDown(KeyCode.R)){
-				IAS_Manager.RefreshBanners(0, 1, true);
-				IAS_Manager.RefreshBanners(0, 2, true);
+				RefreshBanners(0, 1, true);
+				RefreshBanners(0, 2, true);
 			}
 		#endif
 	}
@@ -360,6 +431,9 @@ public class IAS_Manager : MonoBehaviour
 
 	private void RefreshActiveAdSlots()
 	{
+		if (!storeSupportsIAS)
+			return;
+		
 		// Refresh an ad for each slot int so they all have an active ad loaded and ready to be displayed
 		for(int jsonFileId=0;DoesSlotFileIdExist(jsonFileId);jsonFileId++)
 			for(int i=1;DoesSlotIntExist(jsonFileId, i);i++)
@@ -368,12 +442,18 @@ public class IAS_Manager : MonoBehaviour
 
 	private void RefreshActiveAdSlots(int jsonFileId, List<AdJsonFileData> customData = null)
 	{
+		if (!storeSupportsIAS)
+			return;
+		
 		for(int i=1;DoesSlotIntExist(jsonFileId, i, customData);i++)
 			RefreshBanners(jsonFileId, i, false, customData);
 	}
 
 	private void RandomizeAdSlots(int jsonFileId, List<AdJsonFileData> customData = null)
 	{
+		if (!storeSupportsIAS)
+			return;
+		
 		for(int i=1;DoesSlotIntExist(jsonFileId, i);i++)
 		{
 			AdSlotData curSlotData = GetAdSlotData(jsonFileId, i, customData);
@@ -698,7 +778,6 @@ public class IAS_Manager : MonoBehaviour
 				Debug.Log("i was " + i);
 
 				Debug.Log("(char: " + slotChar + ") Load tex for " + curAdData.adUrl);
-
 			}
 
 			if(curAdData != null){// && !curAdData.isDownloading){
@@ -735,47 +814,26 @@ public class IAS_Manager : MonoBehaviour
 									// Read the saved texture from disk
 									byte[] imageData = File.ReadAllBytes(filePath + fileName);
 
-									TextureFormat imageTextureFormat;
-
-									// Detect system compatbility for texture compression formats and use the most efficient
-									// Several IAS adverts will be in memory at once so compression is important
-									// When a compression format isn't supported the system falls into software decompression mode which means using the textures will be very heavy on performance
-									if(SystemInfo.SupportsTextureFormat(TextureFormat.PVRTC_RGBA2)){
-										// Smallest, fastest compression option but does not support ALL android GPUs
-										// However on iOS it should have full support, whereas on the otherhand iOS doesn't seem to support OpenGLES 2
-										imageTextureFormat = TextureFormat.PVRTC_RGBA2;
-									} else if(SystemInfo.SupportsTextureFormat(TextureFormat.ETC2_RGBA1)){
-										// Smallest fastest ETC2 format which supports alpha
-										imageTextureFormat = TextureFormat.ETC2_RGBA1;
-									} else if(SystemInfo.SupportsTextureFormat(TextureFormat.ETC2_RGBA8)){
-										// Last alternative for ETC2 with alpha support
-										imageTextureFormat = TextureFormat.ETC2_RGBA8;
-									} else if(SystemInfo.SupportsTextureFormat(TextureFormat.RGBA32)){
-										// Other compression formats don't seem to be supported, atleast RGBA32 should be.. right?!?
-										imageTextureFormat = TextureFormat.RGBA32;
-									} else {
-										// RGBA32 shouldALWAYS be support so we should never be here unless a crazy device with literally no alpha support exists..
-										// However if a crazy no alpha support device exists then fallback to RGB24
-										imageTextureFormat = TextureFormat.RGB24;
-									}
-
 									// We need to create a template texture, we're also setting the compression type here
-									Texture2D imageTexture = new Texture2D(2, 2, imageTextureFormat, false);
+									Texture2D imageTexture = new Texture2D(2, 2, TextureFormat.ARGB32, false);
 
 									#if UNITY_EDITOR
 										imageTexture.name = wantedSlotInt + slotChar.ToString() + " - " + ConvertToSecureProtocol(jsonUrls[jsonFileId]);
 									#endif
 
 									// Load the image data, this will also resize the texture
-									imageTexture.LoadImage(imageData);
+									if (imageTexture.LoadImage(imageData)) {
+										advertTextures.Add(imageTexture);
 
-									// Note! Compression doesn't work here because we can't resize an image (easily) or change the texture format (easily)
-									// It requires performance expensive operations
+										if (advancedLogging)
+											Debug.Log("Ad texture added for " + wantedSlotInt + slotChar);
+									} else {
+										curAdData.isTextureFileCached = false;
+										
+										SaveIASData();
 
-									advertTextures.Add(imageTexture);
-									
-									if(advancedLogging)
-										Debug.Log("Ad texture added for" + wantedSlotInt + "" + slotChar);
+										yield break;
+									}
 								} catch(IOException e){
 									if(advancedLogging)
 										Debug.Log("IAS Failed to load cached file " + wantedSlotInt + "" + slotChar);
@@ -821,30 +879,36 @@ public class IAS_Manager : MonoBehaviour
 								yield break;
 							}
 							
-							// Interacting with the .text of an image is very slow, with the new Unity web request system these checks aren't even needed anymore anyway
-							/*else if(imageRequestDownloadHandler.text.Contains("There was an error")){
+							//TextureFormat imageTextureFormat;
 
-								FirebaseAnalyticsManager.LogError("IAS image download error - serverside system error");
-								yield break;
-							} else if(string.IsNullOrEmpty(imageRequestDownloadHandler.text)){
-
-								FirebaseAnalyticsManager.LogError("IAS image download error - empty result");
-								yield break;
+							// Detect system compatbility for texture compression formats and use the most efficient
+							// Several IAS adverts will be in memory at once so compression is important
+							// When a compression format isn't supported the system falls into software decompression mode which means using the textures will be very heavy on performance
+							/*if(SystemInfo.SupportsTextureFormat(TextureFormat.PVRTC_RGBA2)){
+								// Smallest, fastest compression option but does not support ALL android GPUs
+								// However on iOS it should have full support, whereas on the otherhand iOS doesn't seem to support OpenGLES 2
+								imageTextureFormat = TextureFormat.PVRTC_RGBA2;
+							} else if(SystemInfo.SupportsTextureFormat(TextureFormat.ETC2_RGBA1)){
+								// Smallest fastest ETC2 format which supports alpha
+								imageTextureFormat = TextureFormat.ETC2_RGBA1;
+							} else if(SystemInfo.SupportsTextureFormat(TextureFormat.ETC2_RGBA8)){
+								// Last alternative for ETC2 with alpha support
+								imageTextureFormat = TextureFormat.ETC2_RGBA8;
+							} else if(SystemInfo.SupportsTextureFormat(TextureFormat.RGBA32)){
+								// Other compression formats don't seem to be supported, atleast RGBA32 should be.. right?!?
+								imageTextureFormat = TextureFormat.RGBA32;
+							} else {
+								// RGBA32 should ALWAYS be support so we should never be here unless a crazy device with literally no alpha support exists..
+								// However if a crazy no alpha support device exists then fallback to RGB24
+								imageTextureFormat = TextureFormat.RGB24;
 							}*/
 
-							// Create a template texture for the downloaded image to be loaded into, this lets us set the compression type and disable mipmaps (we disable mipmaps so the texture quality setting doesn't affect IAS ads) 
-							Texture2D imageTexture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
-
+							Texture2D imageTexture = imageRequestDownloadHandler.texture;
+							
 							#if UNITY_EDITOR
 								imageTexture.name = wantedSlotInt + slotChar.ToString() + " - " + ConvertToSecureProtocol(jsonUrls[jsonFileId]);
 							#endif
-
-							yield return null;
-
-							imageTexture = imageRequestDownloadHandler.texture;
-
-							yield return null;
-
+							
 							advertTextures.Add(imageTexture);
 
 							try {
@@ -895,7 +959,6 @@ public class IAS_Manager : MonoBehaviour
 		return UnityWebRequest.Get(url);
 	}
 
-	
 	private int GetUniqueUsableAdCount(int jsonFileId, int wantedSlotInt)
 	{
 		List<AdData> allSlotAds = advertData[jsonFileId].slotInts[wantedSlotInt-1].advert;
@@ -1142,19 +1205,28 @@ public class IAS_Manager : MonoBehaviour
 					}
 
 					AdData curAdData = newAdvertData[jsonFileId].slotInts[slotDataIndex].advert[slotAdIndex];
-
+					string packageName = "";
+					
 					// Extract the bundleId of the advert
 					#if UNITY_ANDROID
-						// Regex extracts the id GET request from the URL which is the package name of the game
-						// (replaces everything that does NOT match id=blahblah END or NOT match id=blahblah AMERPERSAND
-						string packageName = Regex.Match(curSlot.adurl, "(?<=id=)((?!(&|\\?)).)*").Value;
+						AppStore store = CrossPlatformManager.GetActiveStore();
+
+						if (store == AppStore.GooglePlay) {
+							// Regex extracts the id GET request from the URL which is the package name of the game
+							// (replaces everything that does NOT match id=blahblah END or NOT match id=blahblah AMERPERSAND
+							packageName = Regex.Match(curSlot.adurl, "(?<=id=)((?!(&|\\?)).)*").Value;
+						} else {
+							// For other platforms we should be fine to just use the full URL for package name comparisons as we'll be using .Compare
+							// And other platforms won't include any other referral bundle ids in their URLs
+							packageName = curSlot.adurl;
+						}
 					#elif UNITY_IOS
 						// IOS we just need to grab the name after the hash in the URL
-						string packageName = Regex.Match(curSlot.adurl, "(?<=.*#).*").Value;
+						packageName = Regex.Match(curSlot.adurl, "(?<=.*#).*").Value;
 					#else
 						// For other platforms we should be fine to just use the full URL for package name comparisons as we'll be using .Compare
 						// And other platforms won't include any other referral bundle ids in their URLs
-						string packageName = curSlot.adurl;
+						packageName = curSlot.adurl;
 					#endif
 
 					string imageFileType = Regex.Match(curSlot.imgurl, "(?<=/uploads/adverts/.*)\\.[A-z]*[^(\\?|\")]").Value;
@@ -1225,6 +1297,9 @@ public class IAS_Manager : MonoBehaviour
 	// Or on iOS the app is suspended (calling OnApplicationPause(true)) unless "Exit on suspend" is enabled
 	void OnApplicationQuit()
 	{
+		if (!storeSupportsIAS)
+			return;
+		
 		if(hasQuitForceSaveBeenCalled) return;
 
 		SaveIASData(true);
@@ -1233,6 +1308,9 @@ public class IAS_Manager : MonoBehaviour
 
 	void OnApplicationPause(bool pauseState)
 	{
+		if (!storeSupportsIAS)
+			return;
+		
 		if(pauseState){
 			if(hasQuitForceSaveBeenCalled) return;
 
@@ -1250,6 +1328,9 @@ public class IAS_Manager : MonoBehaviour
 	/// <param name="isBackscreen">Is this a backscreen advert</param>
 	public static void OnImpression(string packageName, bool isBackscreen)
 	{
+		if (!Instance.storeSupportsIAS)
+			return;
+		
 		if (Instance.logAdImpressions) {
 			string selfBundle = Instance.bundleId.Length > 27 ? Instance.bundleId.Substring(0, 27) : Instance.bundleId;
 			string adBundle = packageName.Length > 40 ? packageName.Substring(0, 40) : packageName;
@@ -1266,6 +1347,9 @@ public class IAS_Manager : MonoBehaviour
 	/// <param name="isBackscreen">Is this a backscreen advert</param>
 	public static void OnClick(string packageName, bool isBackscreen)
 	{
+		if (!Instance.storeSupportsIAS)
+			return;
+		
 		if (Instance.logAdClicks) {
 			string selfBundle = Instance.bundleId.Length > 27 ? Instance.bundleId.Substring(0, 27) : Instance.bundleId;
 			string adBundle = packageName.Length > 40 ? packageName.Substring(0, 40) : packageName;
@@ -1281,6 +1365,9 @@ public class IAS_Manager : MonoBehaviour
 	/// <param name="wantedSlotInt">Slot int</param>
 	public static void RefreshBanners(int jsonFileId, int wantedSlotInt, bool forceChangeActive = false, List<AdJsonFileData> customData = null)
 	{
+		if (!Instance.storeSupportsIAS)
+			return;
+		
 		if(!Instance.DoesSlotIntExist(jsonFileId, wantedSlotInt, customData)){
 			#if UNITY_EDITOR
 				Debug.Log("(Editor Only) Attempted to refresh a banner slot which was either blacklisted or not yet ready! (Slot " + wantedSlotInt + ") This will do nothing");
@@ -1313,6 +1400,9 @@ public class IAS_Manager : MonoBehaviour
 	public static bool IsAdReady(int jsonFileId, int wantedSlotInt, int offset = 0) {
 		if (!Instance) return false;
 		
+		if (!Instance.storeSupportsIAS)
+			return false;
+		
 		AdData returnValue = Instance.GetAdData(jsonFileId, wantedSlotInt, offset);
 
 		if(returnValue != null){
@@ -1331,6 +1421,9 @@ public class IAS_Manager : MonoBehaviour
 	public static string GetAdURL(int jsonFileId, int wantedSlotInt, int offset = 0)
 	{
 		if (!Instance) return string.Empty;
+		
+		if (!Instance.storeSupportsIAS)
+			return string.Empty;
 		
 		AdData returnValue = Instance.GetAdData(jsonFileId, wantedSlotInt, offset);
 
@@ -1351,6 +1444,9 @@ public class IAS_Manager : MonoBehaviour
 	{
 		if (!Instance) return string.Empty;
 		
+		if (!Instance.storeSupportsIAS)
+			return string.Empty;
+		
 		AdData returnValue = Instance.GetAdData(jsonFileId, wantedSlotInt, offset);
 
 		if(returnValue != null){
@@ -1369,6 +1465,9 @@ public class IAS_Manager : MonoBehaviour
 	public static Texture GetAdTexture(int jsonFileId, int wantedSlotInt, int offset = 0)
 	{
 		if (!Instance) return null;
+		
+		if (!Instance.storeSupportsIAS)
+			return null;
 		
 		AdData returnValue = Instance.GetAdData(jsonFileId, wantedSlotInt, offset);
 
