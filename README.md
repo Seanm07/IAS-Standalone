@@ -1,5 +1,12 @@
 # IAS Manager Documentation
 
+## Updating to the new IAS (Version 32)
+Replace your existing IAS_Handler.cs with the updated [Canvas](https://github.com/Seanm07/IAS-Standalone/blob/master/IAS_HandlerCanvas.cs) or [NGUI](https://github.com/Seanm07/IAS-Standalone/blob/master/IAS_HandlerNGUI.cs) handler.
+
+Script syntax changes:
+1. jsonFileId is no longer used in IAS function calls
+2. adSize now uses the IASAdSize enum as IASAdSize.Square or IASAdSize.Tall
+
 ## Download the Pickle plugins!
 Our pickle plugins are needed to use the IAS scripts [Download the latest Pickle Plugins here](https://github.com/Seanm07/pickle-plugin/releases/latest)
 
@@ -25,71 +32,44 @@ Note! If you're not using a certain size banner it's still best to blacklist the
 - **Blacklisting slots** *Optional* If you don't need a certain image size then you can completely disable them by blacklisting their id via the IAS_Manager inspector under blacklisted slots, for example add a value of 2 to disable tall banners from loading
 
 ## Scripting:
-### Logging Impressions
-```c#
-IAS_Manager.OnImpression(string packageName);
-```
-Call this when an advert becomes visible to the user, you can grab the package name of adverts from GetAdPackageName(int jsonFileId, int wantedSlotInt) which will return a formatted package name for the platform
 
-**Example usage:**
-```c#
-IAS_Manager.OnImpression(IAS_Manager.GetAdPackageName(0, 1));
-```
-This would log an impression on the current active square advert (id: 1) for the first json file (id: 0)
-
----
-
-### Logging Clicks
-```c#
-IAS_Manager.OnClick(string packageName);
-```
-Call this when an advert is clicked by the user, you can grab the package name of adverts from GetAdPackageName(int jsonFileId, int wantedSlotInt) which will return a formatted package name for the platform
-
-**Example usage:**
-```c#
-IAS_Manager.OnClick(IAS_Manager.GetAdPackageName(0, 1));
-```
-This would log a click on the current active square advert (id: 1) for the first json file (id: 0)
-
----
 
 ### Refreshing Adverts
 ```c#
-IAS_Manager.RefreshBanners(int jsonFileId, int wantedSlotInt, bool forceChangeActive = false);
+IAS_Manager.RefreshBanners(IASAdSize adSize, bool forceChangeActive = false);
 ```
-Refreshes the IAS advert of the requested json file id and slot id, if forceChangeActive is true then the callback OnForceChangeWanted will trigger. Note! The image might not instantly be ready so afterwards you should also wait for the OnIASImageDownloaded callback!
+Refreshes the IAS advert of the requested size, if forceChangeActive is true then the callback OnForceChangeWanted will trigger. Note! The image might not instantly be ready so afterwards you should also wait for the OnIASImageDownloaded callback!
 
 **Example usage:**
 ```c#
-IAS_Manager.RefreshBanners(0, 1);
+IAS_Manager.RefreshBanners(IASAdSize.Square, true);
 ```
-This will refresh the square banner (id: 1) for the first json file (id: 0)
-
+This will refresh the square banner and instantly change the ad texture when ready
 ---
 
 ### Checking Advert States
 ```c#
-IAS_Manager.IsAdReady(int jsonFileId, int wantedSlotInt);
+IAS_Manager.IsAdReady(IASAdSize adSize, int offset = 0);
 ```
 Returns a bool on whether the texture for the requested ad is ready. Note: You don't need to rely on checking this constantly, instead just use the OnIASImageDownloaded callback followed by calling this function to make sure the downloaded image was the wanted ad.
 
 **Example usage:**
 ```c#
-if(IAS_Manager.IsAdReady(0, 2))
+if(IAS_Manager.IsAdReady(IASAdSize.Tall, 2))
 ```
-This will check if the tall banner (id: 2) for the first json file (id: 0) is loaded
+This will check if the tall banner with offset 2 is loaded
 
 ---
 
 ### Get Advert URL
 ```c#
-IAS_Manager.GetAdURL(int jsonFileId, int wantedSlotInt);
+IAS_Manager.GetAdURL(IASAdSize adSize, int offset = 0);
 ```
 Returns the string of the advert URL, this URL should be opened when the ad is clicked
 
 **Example usage:**
 ```c#
-Application.OpenURL(IAS_Manager.GetAdURL(0, 1));
+Application.OpenURL(IAS_Manager.GetAdURL(IASAdSize.Square, 0));
 ```
 Opens the store URL of the active square banner (id: 1) for the first json file (id: 0)
 
@@ -97,21 +77,21 @@ Opens the store URL of the active square banner (id: 1) for the first json file 
 
 ### Get Advert Package Name
 ```c#
-IAS_Manager.GetAdPackage(int jsonFileId, int wantedSlotInt);
+IAS_Manager.GetAdPackage(IASAdSize adSize, int offset = 0);
 ```
 Returns the formatted package name of the requested advert, this works with all platforms including iOS
 
 **Example usage:**
 ```c#
-IAS_Manager.GetAdPackage(0, 2);
+IAS_Manager.GetAdPackage(IASAdSize.Square, 2);
 ```
-Returns the package name of the active tall banner (id: 2) for the first json file (id: 0)
+Returns the package name of the active tall banner at the second offset
 
 ---
 
 ### Get Advert Texture
 ```c#
-IAS_Manager.GetAdTexture(int jsonFileId, int wantedSlotInt);
+IAS_Manager.GetAdTexture(IASAdSize adSize, int offset = 0);
 ```
 Returns the texture for the requested advert. Note: You should check IAS_Manager.IsAdReady(..) before calling this, see the IsAdReady section for more info.
 
@@ -129,8 +109,8 @@ void OnDisable()
 
 private void OnAdReady()
 {
-   if(IAS_Manager.IsAdReady(0, 1)){
-      Texture adTexture = IAS_Manager.GetAdTexture(0, 1);
+   if(IAS_Manager.IsAdReady(IASAdSize.Square, 2)){
+      Texture adTexture = IAS_Manager.GetAdTexture(IASAdSize.Square, 2);
    }
 }
 ```
@@ -157,7 +137,7 @@ void OnDisable()
 
 private void OnAdReady()
 {
-   if(IAS_Manager.IsAdReady(0, 1)){
+   if(IAS_Manager.IsAdReady(IASAdSize.Square, 2)){
       // Set the texture here
    }
 }
