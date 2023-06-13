@@ -1,95 +1,156 @@
-﻿using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.UI;
 
-public class IAS_HandlerCanvas : MonoBehaviour 
-{	
-	public int jsonFileId = 0;
-	[UnityEngine.Serialization.FormerlySerializedAs("bannerID")]
-	public int adTypeId = 1; // 1 = Square, 2 = Tall
-	public int adOffset = 0; // Used for backscreen ads (1, 2, 3)
+[RequireComponent(typeof(RawImage))]
+public class IAS_Handler : MonoBehaviour {
+    public IASAdSize adSize = IASAdSize.Square;
+    public int adOffset = 0; // 0 for main ads / 1, 2, 3 for backscreen ads
 
-	private string activeUrl;
-	private string activePackageName;
+    private int activeId; // Reference to the unique id for this ad on the IAS server (used for analytics)
+    private int activeAdTextureId = -1; // Reference id for the advertTextures list
+    private string activeUrl; // URL which will be opened when clicked
 
-	private bool isTextureAssigned = false;
-	
-	private Button selfButton;
-	private Image selfImage;
+    private bool isTextureAssigned = false;
+    private bool isActiveTextureAnimated = false;
 
-	void Awake()
-	{
-		selfImage = GetComponent<Image>();
+    private int activeFrameIndex;
+    private float timeSinceLastFrame;
+    private float timeUntilNextFrame;
 
-		if(selfImage){
-			selfButton = gameObject.AddComponent<Button>();
-			selfButton.onClick.AddListener(OnMouseUp);
-			
-			selfImage.color = new Color(1f, 1f, 1f, 0f);
-		}
-	}
+    private Button selfButton;
+    private RawImage selfImage;
 
-	void OnEnable()
-	{
-		IAS_Manager.OnIASImageDownloaded += OnIASReady;
-		IAS_Manager.OnForceChangeWanted += OnIASForced;
+    void Awake() {
+        selfImage = GetComponent<RawImage>();
 
-		SetupAdvert();
-	}
+        if (selfImage) {
+            selfButton = gameObject.AddComponent<Button>();
+            selfButton.onClick.AddListener(OnMouseUp);
 
-	void OnDisable()
-	{
-		IAS_Manager.OnIASImageDownloaded -= OnIASReady;
-		IAS_Manager.OnForceChangeWanted -= OnIASForced;
+            selfImage.texture = null;
+            selfImage.color = new Color(1f, 1f, 1f, 0f);
+        } else {
+            Debug.LogError("Raw Image component missing on IAS handler object!", gameObject);
+        }
+    }
 
-		isTextureAssigned = false; // Allows the texture on this IAS ad to be replaced
-	}
-	
-	#if UNITY_EDITOR
-		void Update()
-		{
-			if(Input.GetKeyDown(KeyCode.R)){
-				isTextureAssigned = false;
+    void OnEnable() {
+        IAS_Manager.OnIASImageDownloaded += OnIASReady;
+        IAS_Manager.OnForceChangeWanted += OnIASForced;
+        IAS_Manager.OnIASForceReset += OnIASForceReset;
+        IAS_Manager.OnAnimatedTexturesReady += OnIASAnimationReady;
 
-				IAS_Manager.RefreshBanners(jsonFileId, adTypeId);
+        SetupAdvert();
+    }
+
+    void OnDisable() {
+        IAS_Manager.OnIASImageDownloaded -= OnIASReady;
+        IAS_Manager.OnForceChangeWanted -= OnIASForced;
+        IAS_Manager.OnIASForceReset -= OnIASForceReset;
+        IAS_Manager.OnAnimatedTexturesReady -= OnIASAnimationReady;
+
+        isTextureAssigned = false; // Allows the texture on this IAS ad to be replaced
+    }
+    
+    void Update() {
+        if (isActiveTextureAnimated) {
+            timeSinceLastFrame += Time.unscaledDeltaTime;
+            
+            if (timeSinceLastFrame >= timeUntilNextFrame) {
+                IAS_Manager.IASTextureData adTextureData = IAS_Manager.instance.advertTextures[activeAdTextureId];
+                IAS_Manager.IASTextureData.IASAnimatedFrameData animationFrame = adTextureData.animatedTextureFrames[activeFrameIndex];
+
+                timeUntilNextFrame = animationFrame.timeUntilFrameChange;
+                timeSinceLastFrame = 0f;
+                activeFrameIndex = activeFrameIndex + 1 >= adTextureData.animationFrames ? 0 : activeFrameIndex + 1;
+
+                selfImage.texture = animationFrame.texture;
+                selfImage.color = Color.white;
+            }
+        }
+        
+#if UNITY_EDITOR
+        if (Input.GetKeyDown(KeyCode.R)) {
+            isTextureAssigned = false;
+
+            IAS_Manager.RefreshBanners(adSize);
+        }
+#endif
+    }
+
+    private void OnIASAnimationReady(int adTextureId) {
+        if (activeAdTextureId == adTextureId) {
+            isActiveTextureAnimated = true;
+            activeFrameIndex = 0;
+            timeSinceLastFrame = 0f;
+
+            if(IAS_Manager.instance.advertTextures.Count >= activeAdTextureId && IAS_Manager.instance.advertTextures[activeAdTextureId].animatedTextureFrames.Count > 0){
+				IAS_Manager.IASTextureData.IASAnimatedFrameData animatedFrameData = IAS_Manager.instance.advertTextures[activeAdTextureId].animatedTextureFrames[0];
+            
+				selfImage.texture = animatedFrameData.texture;
 			}
-		}
-	#endif
+        }
+    }
+    
+    private void OnIASReady(IASAdSize loadedAdSize) {
+        if(adSize == loadedAdSize)
+            SetupAdvert();
+    }
 
-	private void OnIASReady()
-	{
-		SetupAdvert();
-	}
+    private void OnIASForced(IASAdSize loadedAdSize) {
+        if (adSize == loadedAdSize) {
+            isTextureAssigned = false;
+            isActiveTextureAnimated = false;
+            activeAdTextureId = -1;
 
-	private void OnIASForced()
-	{
-		isTextureAssigned = false;
+            SetupAdvert();
+        }
+    }
 
-		SetupAdvert();
-	}
+    private void OnIASForceReset() {
+        isTextureAssigned = false;
+        isActiveTextureAnimated = false;
+        activeAdTextureId = -1;
+        
+        selfImage.texture = null;
+        selfImage.color = new Color(1f, 1f, 1f, 0f);
+    }
 
-	private void SetupAdvert()
-	{
-		if(!isTextureAssigned && IAS_Manager.IsAdReady(jsonFileId, adTypeId, adOffset)){
-			Texture2D adTexture = IAS_Manager.GetAdTexture(jsonFileId, adTypeId, adOffset) as Texture2D;
-			activeUrl = IAS_Manager.GetAdURL(jsonFileId, adTypeId, adOffset);
-			activePackageName = IAS_Manager.GetAdPackageName(jsonFileId, adTypeId, adOffset);
+    private void SetupAdvert() {
+        if (!isTextureAssigned && IAS_Manager.IsAdReady(adSize, adOffset)) {
+            // This will only get marked as true when the animation frames have finished loading
+            isActiveTextureAnimated = false;
 
-			selfImage.sprite = Sprite.Create(adTexture, new Rect(0f, 0f, adTexture.width, adTexture.height), new Vector2(adTexture.width / 2f, adTexture.height / 2f));
-			selfImage.color = Color.white;
-			isTextureAssigned = true;
+            Texture2D adTexture = IAS_Manager.GetAdTexture(adSize, adOffset);
 
-			IAS_Manager.OnImpression(activePackageName, adOffset != 0); // DO NOT REMOVE THIS LINE
-		}
-	}
+            if (adTexture != null) {
+                // Show the static IAS image, if it's animated the animated frames with asynchronously load
+                selfImage.texture = adTexture;
+                selfImage.color = Color.white;
+                isTextureAssigned = true;
 
-	void OnMouseUp()
-	{
-		if(selfImage != null && !string.IsNullOrEmpty(activeUrl)){
-			IAS_Manager.OnClick(activePackageName, adOffset != 0); // DO NOT REMOVE THIS LINE
+                IAS_Manager.AdData adData = IAS_Manager.instance.GetAdData(adSize, adOffset);
+                
+                activeId = IAS_Manager.GetAdId(adSize, adOffset, adData);
+                activeAdTextureId = IAS_Manager.GetAdTextureId(adSize, adOffset, adData);
+                activeUrl = IAS_Manager.GetAdURL(adSize, adOffset, adData);
 
-			Application.OpenURL(activeUrl);
-		}
-	}
+                IAS_Manager.instance.OnImpression(activeId); // DO NOT REMOVE THIS LINE
+
+                bool isAnimatedTexture = IAS_Manager.IsAnimatedAdTexture(adSize, adOffset, adData);
+
+                if (isAnimatedTexture) {
+                    IAS_Manager.instance.LoadAnimatedTextures(activeAdTextureId, adSize, adOffset);
+                }
+            }
+        }
+    }
+
+    void OnMouseUp() {
+        if (selfImage != null && !string.IsNullOrEmpty(activeUrl)) {
+            IAS_Manager.instance.OnClick(activeId); // DO NOT REMOVE THIS LINE
+
+            IAS_Manager.instance.OpenURL(activeUrl);
+        }
+    }
 }
