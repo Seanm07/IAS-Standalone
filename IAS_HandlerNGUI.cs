@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 
 public class IAS_Handler : MonoBehaviour {
 
@@ -21,18 +21,8 @@ public class IAS_Handler : MonoBehaviour {
 	void Awake() {
 		selfTexture = GetComponent<UITexture>();
 
-		if (selfTexture) {
-			storedAspectRatio = selfTexture.keepAspectRatio;
-
-			storedRightAnchorTransform = selfTexture.rightAnchor.target;
-			storedRightAnchorAbsolute = selfTexture.rightAnchor.absolute;
-			storedRightAnchorRelative = selfTexture.rightAnchor.relative;
-
-			storedLeftAnchorAbsolute = selfTexture.leftAnchor.absolute;
-			storedLeftAnchorRelative = selfTexture.leftAnchor.relative;
-		} else {
+		if (!selfTexture)
 			Debug.LogError("UITexture component missing on IAS handler object!", gameObject);
-		}
 	}
 
 	void OnEnable() {
@@ -115,43 +105,10 @@ public class IAS_Handler : MonoBehaviour {
 		selfTexture.mainTexture = null;
 	}
 
-	// Cop Duty only
-	private UIWidget.AspectRatioSource storedAspectRatio;
-	private Transform storedRightAnchorTransform;
-	private float storedRightAnchorRelative;
-	private float storedRightAnchorAbsolute;
-
-	private float storedLeftAnchorRelative;
-	private float storedLeftAnchorAbsolute;
-
 	private bool adWasDisabled = false;
 	
 	private void SetupAdvert()
 	{
-		// If the app is actually the paid version, disable all ads including backscreen ads
-		// If this is the free version and the player purchased the IAP to disable ads then we still give backscreen ads
-		if (GameManager.Instance.isAdsDisabled && adOffset == 0) {
-			selfTexture.mainTexture = null;
-			activeUrl = "";
-			
-			// Resize the advert container so anything relying on the ad width is able to take over the ad space
-			selfTexture.keepAspectRatio = UIWidget.AspectRatioSource.Free;
-			selfTexture.leftAnchor.Set(0f, 0f);
-			selfTexture.rightAnchor.Set(selfTexture.cachedTransform, 0f, 0f);
-			selfTexture.ResetAndUpdateAnchors();
-			
-			adWasDisabled = true;
-			return;
-		} else if(adWasDisabled) {
-			// Ads came back :O
-			selfTexture.keepAspectRatio = storedAspectRatio;
-			selfTexture.leftAnchor.Set(storedLeftAnchorRelative, storedLeftAnchorAbsolute);
-			selfTexture.rightAnchor.Set(storedRightAnchorTransform, storedRightAnchorRelative, storedRightAnchorAbsolute);
-			selfTexture.ResetAndUpdateAnchors();
-
-			adWasDisabled = false;
-		}
-		
 		if (!isTextureAssigned && IAS_Manager.IsAdReady(adSize, adOffset)) {
 			// This will only get marked as true when the animation frames have finished loading
 			isActiveTextureAnimated = false;
