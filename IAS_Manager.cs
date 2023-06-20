@@ -183,7 +183,7 @@ public class IAS_Manager : MonoBehaviour {
 	public string bundleId { get; private set; }
 	public string appVersion { get; private set; }
 
-	private int internalScriptVersion = 32;
+	private int internalScriptVersion = 33;
 
 	public enum Platform { Standard, TV }
 
@@ -484,7 +484,7 @@ public class IAS_Manager : MonoBehaviour {
 
 			    yield return null;
 
-			    Texture2D animationFrameTex = new Texture2D(2, 2, TextureFormat.ARGB32, false);
+			    Texture2D animationFrameTex = new Texture2D(curFrameData.width, curFrameData.height, TextureFormat.ARGB32, false);
 			    
 			    if (animationFrameTex.LoadImage(finalImageBytes)) { // Expensive operation
 				    if (compressLoadedTextures) {
@@ -495,15 +495,19 @@ public class IAS_Manager : MonoBehaviour {
 						    Debug.LogError("Cached animation frame " + curFrameFileName + " is incorrectly sized for compression!");
 					    }
 				    }
+
+				    // Add the current frame texture and frame time info to the animatedTextureFrames list
+				    advertTextures[adTextureId].animatedTextureFrames.Add(new IASTextureData.IASAnimatedFrameData(animationFrameTex, curFrameData.frameTime));
 			    } else {
 				    Debug.LogError("Failed to load generated animation frame " + curFrameFileName + " into a Texture2D!");
-			    }
 
-			    // Add the current frame texture and frame time info to the animatedTextureFrames list
-			    advertTextures[adTextureId].animatedTextureFrames.Add(new IASTextureData.IASAnimatedFrameData(animationFrameTex, curFrameData.frameTime));
+				    // Destroy it from memory to fix ALLOC_TEMP_TLS
+				    Destroy(animationFrameTex);
+				    animationFrameTex = null;
+			    }
 		    }
 		    
-		    advertTextures[adTextureId].animationFrames = frameData.Count;
+		    advertTextures[adTextureId].animationFrames = advertTextures[adTextureId].animatedTextureFrames.Count;
 	    } else {
 		    for (int i = 0; i < animationFrames; i++) {
 			    string curFrameFileName = fileNameWithoutExtension + "_frame_" + (i + 1) + ".png";
@@ -604,6 +608,14 @@ public class IAS_Manager : MonoBehaviour {
         byte[] byteChunkLength = new byte[4];
         byte[] byteChunkType = new byte[4];
         
+        // Once we hit the IDAT chunk we need to append all IDAT chunks before decompressing it
+        bool lastChunkWasIDAT = false;
+        byte[] compressedIDAT = new byte[0];
+        
+        // Once we hit an fdAT chunk we need to append all fdAT chunks before decompressing it
+        bool lastChunkWasfdAT = false;
+        byte[] compressedfdAT = new byte[0];
+        
         while (offset < animatedTextureBytes.Length) {
             // First 4 bytes are the length of the current chunk
             Buffer.BlockCopy(animatedTextureBytes, offset, byteChunkLength, 0, 4);
@@ -630,6 +642,33 @@ public class IAS_Manager : MonoBehaviour {
             if (curFrameData == null && (chunkType == "IDAT" || chunkType == "fdAT")){
 	            Debug.LogError("Invalid PNG! fcTL information missing before image data chunk!");
 	            yield break;
+            }
+
+            if (lastChunkWasIDAT && chunkType != "IDAT") {
+	            lastChunkWasIDAT = false;
+	            
+	            // The first 2 bytes of data is the zlib header containing zlib compression method and additional flags/check bits
+	            curFrameData.zlibHeaderData = compressedIDAT.Take(2).ToArray();
+	            
+	            // We need to exclude the zlib header and footer from the data to decompress it
+	            curFrameData.decompressedImageData = DecompressDatastream(compressedIDAT.Skip(2).Take(compressedIDAT.Length - 6).ToArray());
+	            
+	            // Reset the compressed IDAT byte array
+	            compressedIDAT = new byte[0];
+            }
+
+            if (lastChunkWasfdAT && chunkType != "fdAT") {
+	            lastChunkWasfdAT = false;
+	            
+	            // Skip the first 4 bytes which is the sequence number of fdAT
+	            // then take the next 2 bytes which is the zlib header containing zlib compression method and additional flags/check bits
+	            curFrameData.zlibHeaderData = compressedfdAT.Take(2).ToArray();
+
+	            // Exclude the sequence number, zlib header and footer from the data to decompress it
+	            curFrameData.decompressedImageData = DecompressDatastream(compressedfdAT.Skip(2).Take(compressedfdAT.Length - 6).ToArray());
+
+	            // Reset the compressed fdAT byte array
+	            compressedfdAT = new byte[0];
             }
             
             switch (chunkType) {
@@ -703,25 +742,23 @@ public class IAS_Manager : MonoBehaviour {
 	                break;
                 
                 case "IDAT": // Image data for first frame only (used for backwards support to PNG)
-	                curFrameData.width = imageMetaData.width;
-                    curFrameData.height = imageMetaData.height;
-                    curFrameData.x = 0;
-                    curFrameData.y = 0;
+	                if (!lastChunkWasIDAT) {
+		                curFrameData.width = imageMetaData.width;
+		                curFrameData.height = imageMetaData.height;
+		                curFrameData.x = 0;
+		                curFrameData.y = 0;
+		                lastChunkWasIDAT = true;
+	                }
 
-                    // The first 2 bytes of data is the zlib header containing zlib compression method and additional flags/check bits
-                    curFrameData.zlibHeaderData = byteChunkData.Take(2).ToArray();
-
-                    // We need to exclude the zlib header and footer from the data to decompress it
-                    curFrameData.decompressedImageData = DecompressDatastream(byteChunkData.Skip(2).Take(chunkLength - 6).ToArray());
+	                compressedIDAT = compressedIDAT.Concat(byteChunkData.Take(chunkLength)).ToArray();
                     break;
 
                 case "fdAT": // Frame data for all frames after the first
-	                // Skip the first 4 bytes which is the sequence number of fdAT
-	                // then take the next 2 bytes which is the zlib header containing zlib compression method and additional flags/check bits
-                    curFrameData.zlibHeaderData = byteChunkData.Skip(4).Take(2).ToArray();
+	                if(!lastChunkWasfdAT)
+						lastChunkWasfdAT = true;
 
-	                // Exclude the sequence number, zlib header and footer from the data to decompress it
-                    curFrameData.decompressedImageData = DecompressDatastream(byteChunkData.Skip(6).Take(chunkLength - 10).ToArray());
+	                // Skip the first 4 bytes which is the frame data sequence number
+	                compressedfdAT = compressedfdAT.Concat(byteChunkData.Skip(4).Take(chunkLength - 4)).ToArray();
                     break;
             }
         }
